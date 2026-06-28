@@ -45,7 +45,7 @@ export async function getTickets(token) {
 Clerk provides the JWT token. Attach it to every API request:
 
 ```javascript
-import { useAuth } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/react";
 
 const { getToken } = useAuth();
 const token = await getToken();
@@ -56,10 +56,21 @@ const token = await getToken();
 User role comes from Clerk's session claims. Use it to conditionally render manager vs worker views:
 
 ```javascript
-import { useUser } from "@clerk/clerk-react";
+import { useUser } from "@clerk/react";
 
 const { user } = useUser();
 const isManager = user?.publicMetadata?.role === "manager";
+```
+
+## Conditional Auth Rendering
+
+`@clerk/react` does not export `SignedIn` / `SignedOut` components. Use `useAuth()` instead:
+
+```javascript
+import { useAuth, SignInButton, UserButton } from "@clerk/react";
+
+const { isSignedIn, isLoaded } = useAuth();
+if (!isLoaded) return null;
 ```
 
 ## Component Structure
