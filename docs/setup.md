@@ -33,8 +33,8 @@ sudo systemctl enable postgresql
 
 # Create dev database and user
 sudo -u postgres psql
-CREATE USER ticketing_user WITH PASSWORD 'your_password';
-CREATE DATABASE ticketing_dev OWNER ticketing_user;
+CREATE USER ticketing_dev WITH PASSWORD 'your_password';
+CREATE DATABASE ticketing_saas OWNER ticketing_dev;
 \q
 ```
 
@@ -127,7 +127,7 @@ Visit `http://localhost` to see the app.
 
 ### Backend `.env`
 ```
-DATABASE_URL=postgresql://ticketing_user:your_password@localhost/ticketing_dev
+DATABASE_URL=postgresql://ticketing_dev:your_password@localhost/ticketing_saas
 CLERK_SECRET_KEY=your_clerk_secret_key
 ENVIRONMENT=development
 ```

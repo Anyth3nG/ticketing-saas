@@ -86,6 +86,6 @@ Each environment has its own database — migrations must be run separately on e
 
 | Environment | Database |
 |---|---|
-| Dev | `ticketing_dev` (runs on your local VM) |
-| Test | `ticketing_test` (runs automatically on deploy) |
-| Prod | `ticketing_prod` (runs automatically on deploy) |
+| Dev | `ticketing_saas` (runs on your local VM) |
+| Test | `ticketing_saas` (runs automatically on deploy) |
+| Prod | `ticketing_saas` (runs automatically on deploy) |
