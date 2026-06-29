@@ -57,7 +57,7 @@ User's Browser
 ## Database
 
 - PostgreSQL running locally on the EC2 instance (same machine as FastAPI)
-- One database per environment: `ticketing_dev`, `ticketing_test`, `ticketing_prod`
+- One database per environment, all named `ticketing_saas` — each environment runs its own PostgreSQL instance
 - Schema changes managed by Alembic migrations
 - Backups via AWS EBS snapshots + pg_dump cron job
 

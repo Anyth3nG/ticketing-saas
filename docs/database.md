@@ -8,9 +8,9 @@ PostgreSQL is used as the database. One database exists per environment:
 
 | Environment | Database Name |
 |---|---|
-| Dev | `ticketing_dev` |
-| Test | `ticketing_test` |
-| Prod | `ticketing_prod` |
+| Dev | `ticketing_saas` |
+| Test | `ticketing_saas` |
+| Prod | `ticketing_saas` |
 
 Schema changes are managed with **Alembic** migrations. Never edit the database schema manually — always create a migration.
 
