@@ -29,13 +29,52 @@ alembic revision --autogenerate -m "description of change"
 
 ## Tables
 
-> To be defined — data model design in progress.
+### `users`
 
-Planned tables:
+Team members. Synced from Clerk on login.
 
-- `users` — team members
-- `tickets` — tasks and work items
-- `comments` — messages on tickets
-- `assignments` — ticket-to-user assignments
+| Column | Type | Notes |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `clerk_id` | String | Unique, not null — Clerk's user ID |
+| `email` | String | Unique, not null |
+| `name` | String | Not null |
+| `role` | String | Not null — `manager` or `worker` |
+| `created_at` | DateTime | Not null, defaults to `utcnow` |
+
+### `tickets`
+
+Tasks and work items.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `title` | String | Not null |
+| `description` | Text | Nullable |
+| `status` | String | Not null, defaults to `open` — one of `open`, `working_on`, `awaiting_approval`, `done` |
+| `urgency` | String | Not null — one of `low`, `medium`, `high` |
+| `due_date` | Date | Not null |
+| `created_by` | Integer | Foreign key to `users.id`, not null |
+| `created_at` | DateTime | Not null, defaults to `utcnow` |
+| `updated_at` | DateTime | Not null, defaults to `utcnow`, updates on every save |
+
+Relationships:
+- `creator` — the `User` who created the ticket (via `created_by`)
+- `assignments` — related `TicketAssignment` rows
+
+### `ticket_assignments`
+
+Join table linking tickets to the users assigned to them.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `ticket_id` | Integer | Foreign key to `tickets.id`, not null |
+| `user_id` | Integer | Foreign key to `users.id`, not null |
+| `assigned_at` | DateTime | Not null, defaults to `utcnow` |
+
+Relationships:
+- `ticket` — the assigned `Ticket`
+- `user` — the assigned `User`
 
 See [architecture.md](architecture.md) for the system overview.
