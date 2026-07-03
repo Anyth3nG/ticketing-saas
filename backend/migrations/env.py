@@ -13,8 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import Base  # noqa: E402
 
 # Import model modules here so their tables register in Base.metadata for autogenerate:
-# from models.ticket import Ticket  # noqa: F401, E402
-# from models.user import User  # noqa: F401, E402
+import models  # noqa: F401, E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
