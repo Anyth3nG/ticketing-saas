@@ -64,7 +64,21 @@ def list_tickets(db = Depends(get_db), user = Depends(get_current_user)):
     pass
 ```
 
-`get_current_user` is defined in `auth.py` and validates the Clerk JWT from the Authorization header.
+`get_current_user` is defined in `auth.py` and does the following on every request:
+
+1. Extracts the Bearer token from the `Authorization` header via `HTTPBearer` (missing header → `401`).
+2. Fetches Clerk's public JWKS from `{CLERK_FRONTEND_API}/.well-known/jwks.json`, cached in-memory in
+   `auth.py` and refetched once if the token's `kid` isn't found (handles Clerk key rotation).
+3. Verifies the JWT signature and `iss` claim with `python-jose` (`jwt.decode(..., algorithms=["RS256"])`).
+   Invalid/expired/malformed tokens → `401`.
+4. Looks up the `User` row by the token's `sub` claim (`clerk_id`). If no row exists yet, creates one from
+   the token's `email`/`name` claims with `role="worker"` — first login auto-provisions the user.
+
+Required env vars: `CLERK_SECRET_KEY`, `CLERK_FRONTEND_API` (Clerk's Frontend API URL, including the
+`https://` scheme — see `.env.example`).
+
+`get_current_user` returns the SQLAlchemy `User` model, so `user.id` / `user.role` / etc. are available
+directly in route handlers.
 
 ## Role Checking
 
