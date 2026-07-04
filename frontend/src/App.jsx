@@ -1,19 +1,13 @@
-import { useAuth, SignInButton, UserButton } from "@clerk/react";
+import { Outlet } from "react-router-dom";
+import Navbar from "./components/Navbar";
 
 export default function App() {
-  const { isSignedIn, isLoaded } = useAuth();
-
-  if (!isLoaded) return null;
-
   return (
     <div>
-      {!isSignedIn && <SignInButton />}
-      {isSignedIn && (
-        <>
-          <UserButton />
-          <h1>Ticketing System</h1>
-        </>
-      )}
+      <Navbar />
+      <main>
+        <Outlet />
+      </main>
     </div>
   );
 }

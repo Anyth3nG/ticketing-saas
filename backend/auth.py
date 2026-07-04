@@ -20,6 +20,9 @@ CLERK_ISSUER = (
 )
 CLERK_JWKS_URL = f"{CLERK_ISSUER}/.well-known/jwks.json"
 
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
+CLERK_BACKEND_API_URL = "https://api.clerk.com/v1"
+
 _jwks_cache: dict | None = None
 
 
@@ -46,6 +49,28 @@ def _get_signing_key(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     return key
+
+
+def _fetch_clerk_profile(clerk_id: str) -> tuple[str | None, str | None]:
+    response = httpx.get(
+        f"{CLERK_BACKEND_API_URL}/users/{clerk_id}",
+        headers={"Authorization": f"Bearer {CLERK_SECRET_KEY}"},
+        timeout=5,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    email = next(
+        (
+            e["email_address"]
+            for e in data.get("email_addresses", [])
+            if e["id"] == data.get("primary_email_address_id")
+        ),
+        None,
+    )
+    name = " ".join(filter(None, [data.get("first_name"), data.get("last_name")])) or None
+
+    return email, name
 
 
 def get_current_user(
@@ -76,10 +101,9 @@ def get_current_user(
     if user is not None:
         return user
 
-    email = payload.get("email")
-    name = payload.get("name")
+    email, name = _fetch_clerk_profile(clerk_id)
     if not email or not name:
-        raise HTTPException(status_code=401, detail="Token missing required claims")
+        raise HTTPException(status_code=401, detail="Clerk profile missing required fields")
 
     user = User(clerk_id=clerk_id, email=email, name=name, role="worker")
     db.add(user)
