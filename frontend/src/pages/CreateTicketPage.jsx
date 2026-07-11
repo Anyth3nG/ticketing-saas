@@ -3,6 +3,7 @@ import { useAuth } from "@clerk/react";
 import { useNavigate } from "react-router-dom";
 import { createTicket } from "../api/tickets";
 import { getCurrentUser, getUsers } from "../api/users";
+import { todayISO } from "../utils/date";
 
 const URGENCY_OPTIONS = ["low", "medium", "high"];
 
@@ -15,7 +16,7 @@ export default function CreateTicketPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [urgency, setUrgency] = useState("low");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(todayISO());
   const [assignedTo, setAssignedTo] = useState("");
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -29,7 +30,7 @@ export default function CreateTicketPage() {
       if (cancelled) return;
 
       if (currentUser.role !== "manager") {
-        navigate("/tickets", { replace: true });
+        navigate("/worker", { replace: true });
         return;
       }
 
@@ -57,7 +58,7 @@ export default function CreateTicketPage() {
         due_date: dueDate,
         assigned_to: Number(assignedTo),
       });
-      navigate("/tickets");
+      navigate("/manager");
     } catch {
       setError("Failed to create ticket.");
       setSubmitting(false);

@@ -167,6 +167,36 @@ main {
   color: #fff;
   text-decoration: none;
   cursor: pointer;
+  border: none;
+  font: inherit;
+  line-height: normal;
+  box-sizing: border-box;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-h);
+  box-sizing: border-box;
+}
+
+.icon-btn:hover {
+  border-color: var(--accent-border);
 }
 
 form label {
@@ -193,4 +223,361 @@ form select {
   display: flex;
   justify-content: center;
   padding-top: 4rem;
+}
+
+.navbar-link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.navbar-link:hover {
+  color: var(--text-h);
+}
+
+/* Status dot */
+
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Kanban board */
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.kanban-column {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 200px;
+}
+
+.kanban-column-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.kanban-column-count {
+  margin-left: auto;
+  color: var(--text);
+  font-weight: 400;
+}
+
+.kanban-column-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 60px;
+  border-radius: 6px;
+}
+
+.kanban-column-body-over {
+  background: var(--accent-bg);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab-active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+/* Ticket card */
+
+.ticket-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ticket-card-header h3 {
+  font-size: 15px;
+  margin: 0;
+  color: var(--text-h);
+}
+
+.ticket-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.urgency-badge {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.ticket-number {
+  color: var(--text);
+  font-weight: 400;
+}
+
+.reassign-control {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.reassign-control select {
+  max-width: 240px;
+}
+
+/* Manager grid */
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.status-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.manager-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .manager-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .manager-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.worker-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.worker-ticket-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.worker-ticket-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.worker-ticket-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-h);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.worker-ticket-title:hover {
+  color: var(--accent);
+}
+
+/* Archive */
+
+.archive-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.archive-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.archive-row:hover {
+  border-color: var(--accent-border);
+}
+
+.archive-title {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.archive-assignee {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.archive-meta {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Modal */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.modal {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 24px;
+  width: 480px;
+  max-width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.modal-details p {
+  margin-bottom: 6px;
+}
+
+.modal-form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.status-changer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-label input {
+  width: auto;
+  margin: 0;
+}
+
+/* Comments */
+
+.comment-thread {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.comment {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.comment-meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.comment-time {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.comment-thread form {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment-thread textarea {
+  max-width: 100%;
 }

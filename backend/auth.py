@@ -70,6 +70,14 @@ def _fetch_clerk_profile(clerk_id: str) -> tuple[str | None, str | None]:
     )
     name = " ".join(filter(None, [data.get("first_name"), data.get("last_name")])) or None
 
+    # Accounts created via username/password sign-up (no email collected)
+    # have no email_addresses entry. users.email is NOT NULL + unique, so
+    # derive a placeholder from the username rather than failing closed.
+    username = data.get("username")
+    if username:
+        email = email or f"{username}@no-email.local"
+        name = name or username
+
     return email, name
 
 
