@@ -8,13 +8,18 @@ frontend/src/
 │   ├── tickets.js
 │   └── users.js
 ├── components/      ← reusable UI components
-│   ├── TicketCard.jsx
+│   ├── TicketCard.jsx         ← used in both kanban columns and manager boxes
+│   ├── TicketDetailModal.jsx  ← comments + edit, shared by both dashboards
+│   ├── StatusDot.jsx          ← colored status circle, status -> color map
 │   └── Navbar.jsx
 ├── pages/           ← one file per route/screen
-│   ├── Dashboard.jsx
-│   ├── TicketList.jsx
-│   └── TicketDetail.jsx
-├── main.jsx         ← app entry point
+│   ├── WorkerDashboard.jsx    ← kanban board, drag-and-drop, personal tickets
+│   ├── ManagerDashboard.jsx   ← per-worker ticket grid, reassignment
+│   ├── Archive.jsx            ← read-only list of done tickets
+│   └── CreateTicketPage.jsx   ← manager creates + assigns a new ticket
+├── utils/           ← small pure helpers shared across components/pages
+│   └── date.js                ← dd-mm-yyyy display formatting, todayISO()
+├── main.jsx         ← app entry point, role-based redirect at "/"
 └── index.css        ← global styles
 ```
 
@@ -53,14 +58,23 @@ const token = await getToken();
 
 ## Role-Based UI
 
-User role comes from Clerk's session claims. Use it to conditionally render manager vs worker views:
+Role is **not** read from Clerk session claims — Clerk only handles auth, not app roles. Every
+page fetches the current app user from the backend (which owns the `role` column) and branches
+on that:
 
 ```javascript
-import { useUser } from "@clerk/react";
+import { useAuth } from "@clerk/react";
+import { getCurrentUser } from "../api/users";
 
-const { user } = useUser();
-const isManager = user?.publicMetadata?.role === "manager";
+const { getToken } = useAuth();
+const token = await getToken();
+const currentUser = await getCurrentUser(token); // GET /api/users/me
+const isManager = currentUser.role === "manager";
 ```
+
+This is also how route guards work: `WorkerDashboard`/`ManagerDashboard` each fetch the current
+user on mount and redirect away (`navigate("/manager")` / `navigate("/worker")`) if the role
+doesn't match the page.
 
 ## Conditional Auth Rendering
 

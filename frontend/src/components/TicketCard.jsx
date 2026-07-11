@@ -1,16 +1,33 @@
-import { useNavigate } from "react-router-dom";
+import StatusDot from "./StatusDot";
+import { formatDate } from "../utils/date";
 
-export default function TicketCard({ ticket }) {
-  const navigate = useNavigate();
-  const assignedNames = ticket.assignees.map((a) => a.name).join(", ") || "Unassigned";
+const URGENCY_COLORS = {
+  low: "#30a46c",
+  medium: "#f5a623",
+  high: "#e5484d",
+};
 
+export default function TicketCard({ ticket, onClick }) {
   return (
-    <div className="ticket-card" onClick={() => navigate(`/tickets/${ticket.id}`)}>
-      <h3>{ticket.title}</h3>
-      <p>Status: {ticket.status}</p>
-      <p>Urgency: {ticket.urgency}</p>
-      <p>Due: {ticket.due_date}</p>
-      <p>Assigned to: {assignedNames}</p>
+    <div className="ticket-card" onClick={onClick}>
+      <div className="ticket-card-header">
+        <StatusDot status={ticket.status} />
+        <h3>
+          <span className="ticket-number">#{ticket.id}</span> {ticket.title}
+        </h3>
+      </div>
+      <div className="ticket-card-meta">
+        <span
+          className="urgency-badge"
+          style={{ color: URGENCY_COLORS[ticket.urgency] }}
+        >
+          {ticket.urgency}
+        </span>
+        <span>Due {formatDate(ticket.due_date)}</span>
+        <span className="comment-count" title="Comments">
+          💬 {ticket.comment_count}
+        </span>
+      </div>
     </div>
   );
 }
