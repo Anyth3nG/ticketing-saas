@@ -64,6 +64,12 @@ function isThisMonth(dateStr) {
   return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
 }
 
+function isValidStatusTransition(ticket, newStatus) {
+  if (ticket.ticket_type === "assigned" && newStatus === "personal_work") return false;
+  if (ticket.ticket_type === "personal" && newStatus === "to_do") return false;
+  return true;
+}
+
 function DraggableCard({ ticket, onOpen }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: ticket.id,
@@ -240,6 +246,7 @@ export default function WorkerDashboard() {
     const newStatus = over.id;
     const ticket = tickets.find((t) => t.id === ticketId);
     if (!ticket || ticket.status === newStatus) return;
+    if (!isValidStatusTransition(ticket, newStatus)) return;
 
     const previousStatus = ticket.status;
     setTickets((prev) =>

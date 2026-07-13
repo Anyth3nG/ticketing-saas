@@ -9,9 +9,8 @@ import {
   updateTicketStatus,
 } from "../api/tickets";
 import StatusDot, { STATUS_LABELS } from "./StatusDot";
-import { formatDate, formatDateTime } from "../utils/date";
+import { formatDate, formatDateTime, formatTimestampDate } from "../utils/date";
 
-const STATUSES = ["to_do", "personal_work", "working_on", "awaiting_approval", "done"];
 const URGENCY_OPTIONS = ["low", "medium", "high"];
 
 export default function TicketDetailModal({
@@ -58,11 +57,10 @@ export default function TicketDetailModal({
     load();
   }, [load]);
 
-  async function handleStatusChange(e) {
-    const newStatusValue = e.target.value;
+  async function handleMarkPersonalDone() {
     try {
       const token = await getToken();
-      const updated = await updateTicketStatus(token, ticketId, newStatusValue);
+      const updated = await updateTicketStatus(token, ticketId, "done");
       setTicket(updated);
       onChanged?.();
     } catch {
@@ -162,6 +160,7 @@ export default function TicketDetailModal({
                 <p>{ticket.description || "No description."}</p>
                 <p>Urgency: {ticket.urgency}</p>
                 <p>Due: {formatDate(ticket.due_date)}</p>
+                <p>Created: {formatTimestampDate(ticket.created_at)}</p>
                 {canReassign ? (
                   <label className="reassign-control">
                     Assigned to
@@ -251,20 +250,16 @@ export default function TicketDetailModal({
                 )}
               </div>
             ) : (
-              <label className="status-changer">
-                Status
-                <select
-                  value={ticket.status}
-                  onChange={handleStatusChange}
-                  disabled={readOnly}
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="status-changer">
+                <span>Status: {STATUS_LABELS[ticket.status]}</span>
+                {!readOnly &&
+                  ticket.ticket_type === "personal" &&
+                  ticket.status !== "done" && (
+                    <button type="button" onClick={handleMarkPersonalDone}>
+                      Mark as Done
+                    </button>
+                  )}
+              </div>
             )}
 
             <div className="comment-thread">

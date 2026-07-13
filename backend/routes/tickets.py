@@ -45,7 +45,18 @@ def _can_update_status(ticket: Ticket, user: User, new_status: str) -> bool:
     if user.role == "manager":
         # Managers' only status action is approving finished work.
         return ticket.status == "awaiting_approval" and new_status == "done"
-    return _can_view_ticket(ticket, user)
+
+    if not _can_view_ticket(ticket, user):
+        return False
+
+    if ticket.ticket_type == "assigned":
+        # Assigned work never becomes personal work, and only a manager's
+        # approval can move it to done.
+        return new_status not in ("personal_work", "done")
+
+    # Personal work never becomes assigned to_do work, but workers can mark
+    # their own personal tickets done directly -- no approval step for those.
+    return new_status != "to_do"
 
 
 def _get_ticket_or_404(db: Session, ticket_id: int) -> Ticket:

@@ -4,9 +4,14 @@ import { Link, useNavigate } from "react-router-dom";
 import { getTickets } from "../api/tickets";
 import { getCurrentUser, getUsers } from "../api/users";
 import TicketDetailModal from "../components/TicketDetailModal";
-import StatusDot, { STATUS_LABELS } from "../components/StatusDot";
+import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
 
 const LEGEND_STATUSES = ["to_do", "personal_work", "working_on", "awaiting_approval"];
+
+const ALL_STATUSES_VISIBLE = LEGEND_STATUSES.reduce(
+  (acc, s) => ({ ...acc, [s]: true }),
+  {}
+);
 
 export default function ManagerDashboard() {
   const { getToken } = useAuth();
@@ -16,6 +21,17 @@ export default function ManagerDashboard() {
   const [workers, setWorkers] = useState([]);
   const [status, setStatus] = useState("loading");
   const [openTicketId, setOpenTicketId] = useState(null);
+  const [statusFilters, setStatusFilters] = useState({});
+
+  const toggleStatusFilter = (workerId, statusToToggle) => {
+    setStatusFilters((prev) => {
+      const current = prev[workerId] || ALL_STATUSES_VISIBLE;
+      return {
+        ...prev,
+        [workerId]: { ...current, [statusToToggle]: !current[statusToToggle] },
+      };
+    });
+  };
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -82,13 +98,37 @@ export default function ManagerDashboard() {
               t.assignees.some((a) => a.id === worker.id) ||
               (t.ticket_type === "personal" && t.created_by === worker.id)
           );
+          const activeFilter = statusFilters[worker.id] || ALL_STATUSES_VISIBLE;
+          const displayedTickets = workerTickets.filter((t) => activeFilter[t.status]);
 
           return (
             <div key={worker.id} className="worker-box">
-              <h2>{worker.name}</h2>
+              <div className="worker-box-header">
+                <h2>{worker.name}</h2>
+                <div className="worker-status-filter">
+                  {LEGEND_STATUSES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className="status-filter-dot"
+                      style={{
+                        backgroundColor: activeFilter[s] ? STATUS_COLORS[s] : "transparent",
+                        borderColor: STATUS_COLORS[s],
+                      }}
+                      onClick={() => toggleStatusFilter(worker.id, s)}
+                      aria-pressed={activeFilter[s]}
+                      aria-label={`${STATUS_LABELS[s]} (${activeFilter[s] ? "shown" : "hidden"})`}
+                      title={`${activeFilter[s] ? "Hide" : "Show"} ${STATUS_LABELS[s]}`}
+                    />
+                  ))}
+                </div>
+              </div>
               {workerTickets.length === 0 && <p>No active tickets.</p>}
+              {workerTickets.length > 0 && displayedTickets.length === 0 && (
+                <p>No tickets match the selected statuses.</p>
+              )}
               <ul className="worker-ticket-list">
-                {workerTickets.map((ticket) => (
+                {displayedTickets.map((ticket) => (
                   <li key={ticket.id} className="worker-ticket-row">
                     <button
                       type="button"
