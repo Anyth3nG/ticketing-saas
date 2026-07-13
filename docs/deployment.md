@@ -14,38 +14,34 @@ Deployment is fully automated via GitHub Actions. Pushing to a branch triggers t
 
 ## CI/CD Pipeline
 
-### Frontend Pipeline (GitHub Actions)
+Two workflow files, one per environment. Each runs a frontend and backend job in parallel.
 
-Triggered on push to `staging` or `main`:
+### Test Pipeline — `deploy-test.yml`
+
+Triggered on push to `staging`:
 
 ```
-Push to GitHub
+Push to staging
       │
       ▼
 GitHub Actions
       │
-      ├── Install Node dependencies (npm install)
-      ├── Build React app (npm run build)
-      ├── Upload build output to S3 bucket
-      └── Invalidate CloudFront cache
+      ├── [frontend] npm install → npm run build → aws s3 sync → S3_BUCKET_TEST
+      └── [backend]  SSH into EC2_HOST_TEST → git pull → pip install → alembic upgrade head → restart
 ```
 
-### Backend Pipeline (GitHub Actions)
+### Prod Pipeline — `deploy-prod.yml`
 
-Triggered on push to `staging` or `main`:
+Triggered on push to `main`:
 
 ```
-Push to GitHub
+Push to main
       │
       ▼
 GitHub Actions
       │
-      ├── SSH into EC2 instance
-      ├── Pull latest code from GitHub
-      ├── Activate Python virtual environment
-      ├── Install new dependencies (pip install -r requirements.txt)
-      ├── Run Alembic migrations (alembic upgrade head)
-      └── Restart FastAPI (sudo systemctl restart ticketing-backend)
+      ├── [frontend] npm install → npm run build → aws s3 sync → S3_BUCKET_PROD
+      └── [backend]  SSH into EC2_HOST_PROD → git pull → pip install → alembic upgrade head → restart
 ```
 
 ## AWS Infrastructure
@@ -60,7 +56,7 @@ GitHub Actions
 
 ### S3
 
-- One bucket per environment: `ticketing-test`, `ticketing-prod`
+- One bucket per environment: `ticketing-saas-test`, `ticketing-saas-prod`
 - Static website hosting enabled
 - Public read access (CloudFront only)
 
@@ -78,21 +74,22 @@ GitHub Actions
 - ACM SSL certificate attached
 - Health check on `/health` endpoint
 
-## GitHub Actions Secrets
+## GitHub Actions Secrets and Variables
 
-The following secrets must be set in GitHub repository settings:
-
+**Secrets** (sensitive — set under Settings → Secrets):
 ```
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
+EC2_SSH_KEY
+```
+
+**Variables** (non-sensitive — set under Settings → Variables):
+```
 AWS_REGION
 S3_BUCKET_TEST
 S3_BUCKET_PROD
-CLOUDFRONT_DISTRIBUTION_TEST
-CLOUDFRONT_DISTRIBUTION_PROD
 EC2_HOST_TEST
 EC2_HOST_PROD
-EC2_SSH_KEY
 EC2_USER
 ```
 

@@ -26,7 +26,8 @@ def health():
     return {"status": "ok"}
 
 
-# from routes.tickets import router as tickets_router
-# from routes.users import router as users_router
-# app.include_router(tickets_router, prefix="/api")
-# app.include_router(users_router, prefix="/api")
+from routes.tickets import router as tickets_router
+from routes.users import router as users_router
+
+app.include_router(tickets_router, prefix="/api")
+app.include_router(users_router, prefix="/api")

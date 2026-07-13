@@ -1,0 +1,63 @@
+name: Deploy to Prod
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-frontend:
+    name: Deploy frontend to S3
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sync to S3
+        run: aws s3 sync frontend/dist/ s3://${{ vars.S3_BUCKET_PROD }} --delete
+
+  deploy-backend:
+    name: Deploy backend to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 400 ~/.ssh/id_rsa
+
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_PROD }} "
+            cd ~/app &&
+            git pull origin main &&
+            source backend/venv/bin/activate &&
+            pip install -r backend/requirements.txt &&
+            cd backend && alembic upgrade head &&
+            sudo systemctl restart ticketing-backend
+          "
