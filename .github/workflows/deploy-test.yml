@@ -59,7 +59,7 @@ jobs:
             cd ~/app &&
             # Ensures origin uses SSH auth (deploy key), self-heals if the instance repo was ever cloned over HTTPS
             git remote set-url origin git@github.com:Anyth3nG/ticketing-saas.git &&
-            git pull origin staging &&
+            git fetch origin && git reset --hard origin/staging &&
             source backend/venv/bin/activate &&
             pip install -r backend/requirements.txt &&
             cd backend && alembic upgrade head &&
