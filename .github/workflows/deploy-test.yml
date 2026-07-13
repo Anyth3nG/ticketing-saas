@@ -54,6 +54,8 @@ jobs:
       - name: Deploy to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }} "
+            # Pre-trust GitHub's SSH host key so a rebuilt/replacement instance doesn't fail with \"Host key verification failed\"
+            mkdir -p ~/.ssh && ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null &&
             cd ~/app &&
             # Ensures origin uses SSH auth (deploy key), self-heals if the instance repo was ever cloned over HTTPS
             git remote set-url origin git@github.com:Anyth3nG/ticketing-saas.git &&
