@@ -55,6 +55,8 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }} "
             cd ~/app &&
+            # Ensures origin uses SSH auth (deploy key), self-heals if the instance repo was ever cloned over HTTPS
+            git remote set-url origin git@github.com:Anyth3nG/ticketing-saas.git &&
             git pull origin staging &&
             source backend/venv/bin/activate &&
             pip install -r backend/requirements.txt &&
