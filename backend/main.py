@@ -14,6 +14,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost",
         "http://localhost:5173",
+        "http://ticketing-saas-test.s3-website-eu-west-1.amazonaws.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
