@@ -33,8 +33,8 @@ export default function Archive() {
     load();
   }, [load]);
 
-  if (status === "loading") return <p>Loading archive...</p>;
-  if (status === "error") return <p>Failed to load archive.</p>;
+  if (status === "loading") return <p className="state-message">Loading archive…</p>;
+  if (status === "error") return <p className="state-message">Failed to load archive.</p>;
 
   return (
     <div>

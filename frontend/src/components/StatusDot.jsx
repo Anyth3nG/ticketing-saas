@@ -7,7 +7,7 @@ export const STATUS_COLORS = {
 };
 
 export const STATUS_LABELS = {
-  to_do: "To-Do",
+  to_do: "Managers work",
   personal_work: "Personal Work",
   working_on: "Working On",
   awaiting_approval: "Awaiting Approval",

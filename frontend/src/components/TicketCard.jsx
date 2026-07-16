@@ -1,4 +1,4 @@
-import StatusDot from "./StatusDot";
+import { CommentIcon } from "./icons";
 import { formatDate } from "../utils/date";
 
 const URGENCY_COLORS = {
@@ -11,7 +11,6 @@ export default function TicketCard({ ticket, onClick }) {
   return (
     <div className="ticket-card" onClick={onClick}>
       <div className="ticket-card-header">
-        <StatusDot status={ticket.status} />
         <h3>
           <span className="ticket-number">#{ticket.id}</span> {ticket.title}
         </h3>
@@ -25,7 +24,7 @@ export default function TicketCard({ ticket, onClick }) {
         </span>
         <span>Due {formatDate(ticket.due_date)}</span>
         <span className="comment-count" title="Comments">
-          💬 {ticket.comment_count}
+          <CommentIcon /> {ticket.comment_count}
         </span>
       </div>
     </div>
