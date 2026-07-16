@@ -88,6 +88,21 @@ def test_manager_cannot_move_awaiting_approval_to_non_done_status(app_client):
     assert resp.status_code == 403
 
 
+def test_personal_ticket_cannot_go_to_awaiting_approval(app_client):
+    client, db, login_as = app_client
+    worker = make_user(db, "worker")
+    ticket = make_ticket(
+        db, creator=worker, ticket_type="personal", status="personal_work"
+    )
+
+    login_as(worker)
+    resp = client.patch(
+        f"/api/tickets/{ticket.id}/status", json={"status": "awaiting_approval"}
+    )
+
+    assert resp.status_code == 403
+
+
 def test_status_transition_has_no_sequence_enforcement(app_client):
     client, db, login_as = app_client
     manager = make_user(db, "manager")

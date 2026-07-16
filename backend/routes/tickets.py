@@ -61,9 +61,10 @@ def _can_update_status(ticket: Ticket, user: User, new_status: str) -> bool:
         # approval can move it to done.
         return new_status not in ("personal_work", "done")
 
-    # Personal work never becomes assigned to_do work, but workers can mark
-    # their own personal tickets done directly -- no approval step for those.
-    return new_status != "to_do"
+    # Personal work never becomes assigned to_do work, and skips the
+    # approval step entirely -- workers mark their own personal tickets
+    # done directly, never awaiting_approval.
+    return new_status not in ("to_do", "awaiting_approval")
 
 
 def _get_ticket_or_404(db: Session, ticket_id: int) -> Ticket:

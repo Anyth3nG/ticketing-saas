@@ -26,6 +26,9 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
+        env:
+          VITE_API_URL: ${{ vars.PROD_API_URL }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.PROD_CLERK_PUBLISHABLE_KEY }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -50,6 +53,16 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 400 ~/.ssh/id_rsa
+
+      - name: Write backend .env
+        run: |
+          cat > /tmp/backend.env << 'EOF'
+          DATABASE_URL=${{ secrets.DATABASE_URL_PROD }}
+          CLERK_SECRET_KEY=${{ secrets.PROD_CLERK_SECRET_KEY }}
+          CLERK_FRONTEND_API=${{ secrets.PROD_CLERK_FRONTEND_API }}
+          ENVIRONMENT=prod
+          EOF
+          scp -o StrictHostKeyChecking=no /tmp/backend.env ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_PROD }}:~/app/backend/.env
 
       - name: Deploy to EC2
         run: |

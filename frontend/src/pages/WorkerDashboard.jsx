@@ -18,7 +18,6 @@ import { getCurrentUser } from "../api/users";
 import TicketCard from "../components/TicketCard";
 import TicketDetailModal from "../components/TicketDetailModal";
 import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
-import { RefreshIcon } from "../components/icons";
 import { todayISO } from "../utils/date";
 
 const COLUMNS = ["to_do", "personal_work", "working_on", "awaiting_approval"];
@@ -69,6 +68,7 @@ function isThisMonth(dateStr) {
 function isValidStatusTransition(ticket, newStatus) {
   if (ticket.ticket_type === "assigned" && newStatus === "personal_work") return false;
   if (ticket.ticket_type === "personal" && newStatus === "to_do") return false;
+  if (ticket.ticket_type === "personal" && newStatus === "awaiting_approval") return false;
   return true;
 }
 
@@ -298,7 +298,7 @@ export default function WorkerDashboard() {
       if (personalTab === "today") return isToday(t.due_date);
       if (personalTab === "week") return isThisWeek(t.due_date);
       if (personalTab === "month") return isThisMonth(t.due_date);
-      return !t.is_recurring;
+      return true;
     });
 
   const columnTickets = {
@@ -313,15 +313,6 @@ export default function WorkerDashboard() {
       <div className="page-header">
         <h1>My Board</h1>
         <div className="page-header-actions">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={load}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshIcon />
-          </button>
           <button className="btn" onClick={() => setShowCreateForm(true)}>
             Create personal ticket
           </button>

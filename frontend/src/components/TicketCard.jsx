@@ -1,4 +1,4 @@
-import { CommentIcon } from "./icons";
+import { CommentIcon, RepeatIcon } from "./icons";
 import { formatDate } from "../utils/date";
 
 const URGENCY_COLORS = {
@@ -22,6 +22,11 @@ export default function TicketCard({ ticket, onClick }) {
         >
           {ticket.urgency}
         </span>
+        {ticket.is_recurring && (
+          <span className="recurring-badge" title="Recurring ticket">
+            <RepeatIcon /> Recurring
+          </span>
+        )}
         <span>Due {formatDate(ticket.due_date)}</span>
         <span className="comment-count" title="Comments">
           <CommentIcon /> {ticket.comment_count}

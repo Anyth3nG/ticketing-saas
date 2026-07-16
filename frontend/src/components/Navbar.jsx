@@ -31,8 +31,8 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <span className="navbar-brand">
-        <img className="navbar-logo" src="/favicon.svg" alt="" aria-hidden="true" />
-        <span className="navbar-title">MAX-CPA</span>
+        <img className="navbar-logo" src="/logo_mark.svg" alt="" aria-hidden="true" />
+        <img className="navbar-wordmark" src="/wordmark_name.svg" alt="MAX-CPA" />
       </span>
       <Link
         className={"navbar-link" + (isDashboard ? " navbar-link-active" : "")}
