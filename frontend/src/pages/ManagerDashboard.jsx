@@ -5,7 +5,7 @@ import { createTicket, getTickets } from "../api/tickets";
 import { getCurrentUser, getUsers } from "../api/users";
 import TicketDetailModal from "../components/TicketDetailModal";
 import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
-import { AlertIcon, RefreshIcon } from "../components/icons";
+import { AlertIcon } from "../components/icons";
 import { formatDate, todayISO } from "../utils/date";
 
 const LEGEND_STATUSES = ["to_do", "personal_work", "working_on", "awaiting_approval"];
@@ -151,6 +151,38 @@ export default function ManagerDashboard() {
     });
   };
 
+  const toggleStatusFilterForAll = (statusToToggle) => {
+    const isActiveForAll = workers.every(
+      (w) => (statusFilters[w.id] || ALL_STATUSES_VISIBLE)[statusToToggle]
+    );
+    const next = !isActiveForAll;
+    setStatusFilters((prev) => {
+      const updated = { ...prev };
+      workers.forEach((w) => {
+        const current = prev[w.id] || ALL_STATUSES_VISIBLE;
+        updated[w.id] = { ...current, [statusToToggle]: next };
+      });
+      return updated;
+    });
+  };
+
+  const isolateStatusFilterForAll = (targetStatus) => {
+    const isIsolated = workers.every((w) => {
+      const current = statusFilters[w.id] || ALL_STATUSES_VISIBLE;
+      return LEGEND_STATUSES.every((s) => current[s] === (s === targetStatus));
+    });
+    const nextFilter = isIsolated
+      ? ALL_STATUSES_VISIBLE
+      : LEGEND_STATUSES.reduce((acc, s) => ({ ...acc, [s]: s === targetStatus }), {});
+    setStatusFilters((prev) => {
+      const updated = { ...prev };
+      workers.forEach((w) => {
+        updated[w.id] = { ...nextFilter };
+      });
+      return updated;
+    });
+  };
+
   const load = useCallback(async () => {
     setStatus("loading");
     try {
@@ -191,15 +223,6 @@ export default function ManagerDashboard() {
       <div className="page-header">
         <h1>Team Board</h1>
         <div className="page-header-actions">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={load}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshIcon />
-          </button>
           <button type="button" className="btn" onClick={() => setShowCreateForm(true)}>
             Create Ticket
           </button>
@@ -211,9 +234,18 @@ export default function ManagerDashboard() {
           <span className="stat-label">Open tickets</span>
           <span className="stat-value">{tickets.length}</span>
         </div>
-        <div className="stat-tile stat-tile-success">
-          <span className="stat-label">Awaiting approval</span>
-          <span className="stat-value">{awaitingApprovalCount}</span>
+        <div className="stat-tile stat-tile-success stat-tile-with-action">
+          <div className="stat-tile-main">
+            <span className="stat-label">Awaiting approval</span>
+            <span className="stat-value">{awaitingApprovalCount}</span>
+          </div>
+          <button
+            type="button"
+            className="stat-tile-filter-btn"
+            onClick={() => isolateStatusFilterForAll("awaiting_approval")}
+          >
+            Filter board
+          </button>
         </div>
         <div className="stat-tile stat-tile-critical">
           <span className="stat-label">Overdue</span>
@@ -225,12 +257,24 @@ export default function ManagerDashboard() {
       </div>
 
       <div className="status-legend">
-        {LEGEND_STATUSES.map((s) => (
-          <span key={s} className="status-legend-item">
-            <StatusDot status={s} />
-            {STATUS_LABELS[s]}
-          </span>
-        ))}
+        {LEGEND_STATUSES.map((s) => {
+          const isActiveForAll =
+            workers.length > 0 &&
+            workers.every((w) => (statusFilters[w.id] || ALL_STATUSES_VISIBLE)[s]);
+          return (
+            <button
+              key={s}
+              type="button"
+              className={`status-legend-item${isActiveForAll ? "" : " status-legend-item-inactive"}`}
+              onClick={() => toggleStatusFilterForAll(s)}
+              aria-pressed={isActiveForAll}
+              title={`${isActiveForAll ? "Hide" : "Show"} ${STATUS_LABELS[s]} for all workers`}
+            >
+              <StatusDot status={s} />
+              {STATUS_LABELS[s]}
+            </button>
+          );
+        })}
       </div>
 
       <div className="manager-grid">
@@ -260,6 +304,7 @@ export default function ManagerDashboard() {
                     </span>
                   )}
                   <h2>{worker.name}</h2>
+                  <span className="worker-ticket-count">{workerTickets.length}</span>
                 </div>
                 <div className="worker-status-filter">
                   {LEGEND_STATUSES.map((s) => (
