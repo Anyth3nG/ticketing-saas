@@ -4,7 +4,14 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user, require_manager
 from database import get_db
-from models import RecurringTicketTemplate, Ticket, TicketAssignment, TicketComment, User
+from models import (
+    Notification,
+    RecurringTicketTemplate,
+    Ticket,
+    TicketAssignment,
+    TicketComment,
+    User,
+)
 from schemas import (
     AssignmentCreate,
     PersonalTicketCreate,
@@ -64,6 +71,12 @@ def _get_ticket_or_404(db: Session, ticket_id: int) -> Ticket:
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
+
+
+def _comment_recipients(ticket: Ticket, author_id: int) -> set[int]:
+    recipients = {ticket.created_by, *(a.user_id for a in ticket.assignments)}
+    recipients.discard(author_id)
+    return recipients
 
 
 @router.post("/", response_model=TicketResponse, status_code=201)
@@ -277,6 +290,15 @@ def create_comment(
         ticket_id=ticket.id, user_id=current_user.id, content=payload.content
     )
     db.add(comment)
+    db.flush()
+
+    for recipient_id in _comment_recipients(ticket, current_user.id):
+        db.add(
+            Notification(
+                user_id=recipient_id, ticket_id=ticket.id, comment_id=comment.id
+            )
+        )
+
     db.commit()
     db.refresh(comment)
     return comment

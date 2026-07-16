@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   DndContext,
   PointerSensor,
@@ -17,7 +17,8 @@ import {
 import { getCurrentUser } from "../api/users";
 import TicketCard from "../components/TicketCard";
 import TicketDetailModal from "../components/TicketDetailModal";
-import StatusDot, { STATUS_LABELS } from "../components/StatusDot";
+import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
+import { RefreshIcon } from "../components/icons";
 import { todayISO } from "../utils/date";
 
 const COLUMNS = ["to_do", "personal_work", "working_on", "awaiting_approval"];
@@ -26,6 +27,7 @@ const PERSONAL_TABS = [
   { key: "today", label: "Today" },
   { key: "week", label: "This Week" },
   { key: "month", label: "This Month" },
+  { key: "all", label: "All" },
 ];
 
 function parseISODate(s) {
@@ -75,7 +77,12 @@ function DraggableCard({ ticket, onOpen }) {
     id: ticket.id,
   });
   const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 10 }
+    ? {
+        transform: `translate(${transform.x}px, ${transform.y}px) rotate(2deg)`,
+        zIndex: 10,
+        boxShadow: "var(--shadow)",
+        cursor: "grabbing",
+      }
     : undefined;
 
   return (
@@ -85,12 +92,13 @@ function DraggableCard({ ticket, onOpen }) {
   );
 }
 
-function DroppableColumn({ status, children }) {
+function DroppableColumn({ status, activeTicket, children }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const showOver = isOver && (!activeTicket || isValidStatusTransition(activeTicket, status));
   return (
     <div
       ref={setNodeRef}
-      className={`kanban-column-body${isOver ? " kanban-column-body-over" : ""}`}
+      className={`kanban-column-body${showOver ? " kanban-column-body-over" : ""}`}
     >
       {children}
     </div>
@@ -191,7 +199,7 @@ function CreatePersonalTicketForm({ onClose, onCreated }) {
             </label>
           )}
           {error && <p className="error">{error}</p>}
-          <button type="submit" disabled={submitting}>
+          <button type="submit" className="btn" disabled={submitting}>
             Create
           </button>
         </form>
@@ -203,12 +211,22 @@ function CreatePersonalTicketForm({ onClose, onCreated }) {
 export default function WorkerDashboard() {
   const { getToken } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [user, setUser] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [status, setStatus] = useState("loading");
   const [openTicketId, setOpenTicketId] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [personalTab, setPersonalTab] = useState("today");
+  const [activeTicket, setActiveTicket] = useState(null);
+
+  useEffect(() => {
+    const ticketParam = searchParams.get("ticket");
+    if (!ticketParam) return;
+    setOpenTicketId(Number(ticketParam));
+    searchParams.delete("ticket");
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -232,13 +250,21 @@ export default function WorkerDashboard() {
 
   useEffect(() => {
     load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
   }, [load]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
+  function handleDragStart(event) {
+    const ticket = tickets.find((t) => t.id === event.active.id);
+    setActiveTicket(ticket ?? null);
+  }
+
   async function handleDragEnd(event) {
+    setActiveTicket(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -263,15 +289,16 @@ export default function WorkerDashboard() {
     }
   }
 
-  if (status === "loading" || !user) return <p>Loading dashboard...</p>;
-  if (status === "error") return <p>Failed to load dashboard.</p>;
+  if (!user && status === "loading") return <p className="state-message">Loading dashboard…</p>;
+  if (!user && status === "error") return <p className="state-message">Failed to load dashboard.</p>;
 
   const filteredPersonal = tickets
     .filter((t) => t.status === "personal_work")
     .filter((t) => {
       if (personalTab === "today") return isToday(t.due_date);
       if (personalTab === "week") return isThisWeek(t.due_date);
-      return isThisMonth(t.due_date);
+      if (personalTab === "month") return isThisMonth(t.due_date);
+      return !t.is_recurring;
     });
 
   const columnTickets = {
@@ -293,7 +320,7 @@ export default function WorkerDashboard() {
             aria-label="Refresh"
             title="Refresh"
           >
-            🔄
+            <RefreshIcon />
           </button>
           <button className="btn" onClick={() => setShowCreateForm(true)}>
             Create personal ticket
@@ -301,10 +328,19 @@ export default function WorkerDashboard() {
         </div>
       </div>
 
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setActiveTicket(null)}
+      >
         <div className="kanban-board">
           {COLUMNS.map((columnStatus) => (
-            <div key={columnStatus} className="kanban-column">
+            <div
+              key={columnStatus}
+              className="kanban-column"
+              style={{ "--column-accent": STATUS_COLORS[columnStatus] }}
+            >
               <div className="kanban-column-header">
                 <StatusDot status={columnStatus} />
                 <span>{STATUS_LABELS[columnStatus]}</span>
@@ -328,7 +364,7 @@ export default function WorkerDashboard() {
                 </div>
               )}
 
-              <DroppableColumn status={columnStatus}>
+              <DroppableColumn status={columnStatus} activeTicket={activeTicket}>
                 {columnTickets[columnStatus].map((ticket) => (
                   <DraggableCard key={ticket.id} ticket={ticket} onOpen={setOpenTicketId} />
                 ))}

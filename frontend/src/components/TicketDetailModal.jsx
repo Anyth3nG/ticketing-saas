@@ -9,6 +9,7 @@ import {
   updateTicketStatus,
 } from "../api/tickets";
 import StatusDot, { STATUS_LABELS } from "./StatusDot";
+import { CheckIcon, EditIcon } from "./icons";
 import { formatDate, formatDateTime, formatTimestampDate } from "../utils/date";
 
 const URGENCY_OPTIONS = ["low", "medium", "high"];
@@ -136,6 +137,13 @@ export default function TicketDetailModal({
     ticket?.ticket_type === "assigned" &&
     workers?.length > 0;
 
+  const showApprove = !readOnly && isManager && ticket?.status === "awaiting_approval";
+  const showPersonalDone =
+    !readOnly &&
+    !isManager &&
+    ticket?.ticket_type === "personal" &&
+    ticket?.status !== "done";
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -143,8 +151,8 @@ export default function TicketDetailModal({
           ×
         </button>
 
-        {status === "loading" && <p>Loading...</p>}
-        {status === "error" && <p className="error">Something went wrong.</p>}
+        {status === "loading" && <p className="state-message">Loading…</p>}
+        {status === "error" && <p className="state-message error">Something went wrong.</p>}
 
         {ticket && (
           <>
@@ -153,6 +161,28 @@ export default function TicketDetailModal({
               <h2>
                 <span className="ticket-number">#{ticket.id}</span> {ticket.title}
               </h2>
+              {(showApprove || showPersonalDone) && (
+                <button
+                  type="button"
+                  className="icon-btn btn-success modal-edit-btn"
+                  onClick={showApprove ? handleApprove : handleMarkPersonalDone}
+                  aria-label="Mark as done"
+                  title="Mark as done"
+                >
+                  <CheckIcon />
+                </button>
+              )}
+              {!editing && canEdit && (
+                <button
+                  type="button"
+                  className="icon-btn modal-edit-btn"
+                  onClick={() => setEditing(true)}
+                  aria-label="Edit ticket"
+                  title="Edit ticket"
+                >
+                  <EditIcon />
+                </button>
+              )}
             </div>
 
             {!editing && (
@@ -179,11 +209,6 @@ export default function TicketDetailModal({
                   ticket.assignees.length > 0 && (
                     <p>Assigned to: {ticket.assignees.map((a) => a.name).join(", ")}</p>
                   )
-                )}
-                {canEdit && (
-                  <button type="button" onClick={() => setEditing(true)}>
-                    Edit
-                  </button>
                 )}
               </div>
             )}
@@ -230,7 +255,7 @@ export default function TicketDetailModal({
                   />
                 </label>
                 <div className="modal-form-actions">
-                  <button type="submit" disabled={saving}>
+                  <button type="submit" className="btn" disabled={saving}>
                     Save
                   </button>
                   <button type="button" onClick={() => setEditing(false)}>
@@ -240,27 +265,9 @@ export default function TicketDetailModal({
               </form>
             )}
 
-            {isManager ? (
-              <div className="status-changer">
-                <span>Status: {STATUS_LABELS[ticket.status]}</span>
-                {!readOnly && ticket.status === "awaiting_approval" && (
-                  <button type="button" onClick={handleApprove}>
-                    Mark as Done
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="status-changer">
-                <span>Status: {STATUS_LABELS[ticket.status]}</span>
-                {!readOnly &&
-                  ticket.ticket_type === "personal" &&
-                  ticket.status !== "done" && (
-                    <button type="button" onClick={handleMarkPersonalDone}>
-                      Mark as Done
-                    </button>
-                  )}
-              </div>
-            )}
+            <div className="status-changer">
+              <span>Status: {STATUS_LABELS[ticket.status]}</span>
+            </div>
 
             <div className="comment-thread">
               <h3>Comments</h3>
@@ -282,7 +289,7 @@ export default function TicketDetailModal({
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder="Add a comment..."
                 />
-                <button type="submit" disabled={posting || !newComment.trim()}>
+                <button type="submit" className="btn-soft" disabled={posting || !newComment.trim()}>
                   Post
                 </button>
               </form>
