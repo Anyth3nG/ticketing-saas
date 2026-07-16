@@ -85,6 +85,27 @@ requirement.
 
 ---
 
+## User profile sync: throttled, not on every request or via webhook
+
+`name`, `email`, and `avatar_url` are copied from Clerk into our own `users` table (so the
+manager dashboard can show a worker's picture without the frontend needing per-user Clerk
+API access). Two options were considered:
+
+- **A Clerk webhook** (`user.updated`) would push changes immediately, but means standing up a
+  public webhook endpoint, verifying Clerk's signature, and handling delivery failures/retries
+  — real infrastructure for a field that changes rarely (someone's display name or photo).
+- **Re-fetching from Clerk on every request** is simplest to write, but `get_current_user` runs
+  on every API call including the frontend's own polling (dashboards refetch every 10-30s) — an
+  unthrottled live fetch would multiply Clerk API calls far beyond what 15 users need and risks
+  hitting Clerk's rate limits.
+
+Landed on: refresh from Clerk opportunistically inside `get_current_user`, throttled to once an
+hour per user (`PROFILE_SYNC_INTERVAL` in `backend/auth.py`). A profile change shows up within
+an hour of that person's next request, which is fine for a name or photo, and a Clerk API
+failure during a refresh is swallowed rather than breaking the request.
+
+---
+
 ## Kubernetes: Not used
 
 Kubernetes (EKS) was considered and ruled out. For 15 internal users with a single backend service and database, Kubernetes adds enormous infrastructure complexity, steep learning curve, and significant cost ($150+/month on EKS) with no meaningful benefit at this scale. It can be revisited if the product grows to hundreds of users across multiple services.

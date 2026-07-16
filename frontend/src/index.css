@@ -734,6 +734,7 @@ form textarea {
   font-family: var(--heading);
   font-weight: 600;
   font-size: 12px;
+  object-fit: cover;
 }
 
 .worker-status-filter {

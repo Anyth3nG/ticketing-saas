@@ -39,8 +39,16 @@ Team members. Synced from Clerk on login.
 | `clerk_id` | String | Unique, not null — Clerk's user ID |
 | `email` | String | Unique, not null |
 | `name` | String | Not null |
+| `avatar_url` | String | Nullable — Clerk's `image_url` for this user |
 | `role` | String | Not null — `manager` or `worker` |
 | `created_at` | DateTime | Not null, defaults to `utcnow` |
+| `synced_at` | DateTime | Nullable — last time `name`/`email`/`avatar_url` were refreshed from Clerk; null for rows created before this column existed, until their next sync |
+
+`name`, `email`, and `avatar_url` are refreshed from Clerk in `get_current_user`
+(`backend/auth.py`), throttled to once per hour per user (`PROFILE_SYNC_INTERVAL`) rather than
+on every request — that dependency runs on every API call, including the frontend's own
+polling, so an unthrottled live fetch would hammer Clerk's API. A Clerk API failure during a
+refresh is swallowed and the request proceeds with the last-known profile.
 
 ### `tickets`
 
