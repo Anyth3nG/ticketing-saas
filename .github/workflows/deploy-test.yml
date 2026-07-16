@@ -1,0 +1,80 @@
+name: Deploy to Test
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  deploy-frontend:
+    name: Deploy frontend to S3
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Sync to S3
+        run: aws s3 sync frontend/dist/ s3://${{ vars.S3_BUCKET_TEST }} --delete
+
+  deploy-backend:
+    name: Deploy backend to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 400 ~/.ssh/id_rsa
+
+      - name: Write backend .env
+        run: |
+          cat > /tmp/backend.env << 'EOF'
+          DATABASE_URL=${{ secrets.DATABASE_URL_TEST }}
+          CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_FRONTEND_API=${{ secrets.CLERK_FRONTEND_API }}
+          ENVIRONMENT=test
+          EOF
+          scp -o StrictHostKeyChecking=no /tmp/backend.env ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }}:~/app/backend/.env
+
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }} "
+            # Pre-trust GitHub's SSH host key so a rebuilt/replacement instance doesn't fail with \"Host key verification failed\"
+            mkdir -p ~/.ssh && ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null &&
+            cd ~/app &&
+            # Ensures origin uses SSH auth (deploy key), self-heals if the instance repo was ever cloned over HTTPS
+            git remote set-url origin git@github.com:Anyth3nG/ticketing-saas.git &&
+            git fetch origin && git reset --hard origin/staging &&
+            source backend/venv/bin/activate &&
+            pip install -r backend/requirements.txt &&
+            cd backend && alembic upgrade head &&
+            sudo systemctl restart ticketing-backend
+          "
