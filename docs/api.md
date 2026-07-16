@@ -203,6 +203,34 @@ Delete a ticket and its assignments. **Managers only**.
 
 Response: `204 No Content`. `404` if the ticket doesn't exist.
 
+### Notifications
+
+In-app notifications for ticket comments. A notification is created for a ticket's creator and
+assignee(s) whenever someone else posts a comment on it (see `POST /api/tickets/{id}/comments`
+above) — the commenter themselves is never notified of their own comment.
+
+#### `GET /api/notifications`
+
+List the current user's **unread** notifications, most recent first. Read notifications are not
+returned — there's no separate "history" endpoint.
+
+Response: `200 OK`, `list[NotificationResponse]` (`id`, `ticket_id`, `ticket_title`, `is_read`,
+`created_at`, nested `comment` — a `TicketCommentResponse`). Capped at 50.
+
+#### `POST /api/notifications/{id}/read`
+
+Mark one notification read. Only the recipient can mark their own notification — `404` for any
+other user, including a valid `id` belonging to someone else (so as not to leak its existence).
+
+Response: `200 OK`, `NotificationResponse`. `404` if the notification doesn't exist for the
+current user.
+
+#### `POST /api/notifications/read-all`
+
+Mark all of the current user's unread notifications read.
+
+Response: `204 No Content`.
+
 ### Health
 
 #### `GET /health`

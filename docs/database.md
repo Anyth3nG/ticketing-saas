@@ -101,6 +101,28 @@ Relationships:
 - `ticket` — the commented-on `Ticket`
 - `user` — the `User` who wrote the comment
 
+### `notifications`
+
+In-app notifications, created when a comment is posted on a ticket.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | Integer | Primary key |
+| `user_id` | Integer | Foreign key to `users.id`, not null — the recipient |
+| `ticket_id` | Integer | Foreign key to `tickets.id`, not null |
+| `comment_id` | Integer | Foreign key to `ticket_comments.id`, not null — the comment that triggered it |
+| `is_read` | Boolean | Not null, defaults to `false` |
+| `created_at` | DateTime | Not null, defaults to `utcnow` |
+
+Relationships:
+- `user` — the recipient `User`
+- `ticket` — the `Ticket` the comment was posted on
+- `comment` — the `TicketComment` that triggered the notification
+
+Created for the ticket's creator and assignee(s), excluding whoever posted the comment
+(`_comment_recipients` in `routes/tickets.py`). `GET /api/notifications` only returns unread
+rows — once read, a notification no longer appears there. See [api.md](api.md).
+
 ### `recurring_ticket_templates`
 
 Templates that generate new tickets on a recurring monthly schedule.

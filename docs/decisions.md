@@ -70,6 +70,21 @@ GitHub Actions was chosen for CI/CD because:
 
 ---
 
+## Notifications & live updates: polling over WebSockets
+
+Ticket comments needed some form of notification, and dashboards needed to reflect other
+users' changes without a manual refresh. WebSockets (or SSE) would give instant push, but add
+a persistent-connection server, reconnect handling, and more moving parts to run on a single
+EC2 instance — not worth it for 15 users who already have the board open most of the day.
+
+Instead: the frontend polls `GET /api/tickets` (worker board every 30s, manager board every
+10s) and `GET /api/notifications` (every 15s). This reuses plain REST endpoints, needs no new
+infrastructure, and the delay is invisible at this team size. Revisit if the team grows large
+enough that polling load becomes a real cost, or if truly instant delivery becomes a
+requirement.
+
+---
+
 ## Kubernetes: Not used
 
 Kubernetes (EKS) was considered and ruled out. For 15 internal users with a single backend service and database, Kubernetes adds enormous infrastructure complexity, steep learning curve, and significant cost ($150+/month on EKS) with no meaningful benefit at this scale. It can be revisited if the product grows to hundreds of users across multiple services.

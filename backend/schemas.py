@@ -53,6 +53,7 @@ class TicketResponse(BaseModel):
     status: str
     urgency: str
     due_date: date
+    is_recurring: bool
     created_by: int
     created_at: datetime
     updated_at: datetime
@@ -104,3 +105,20 @@ class TicketCommentResponse(BaseModel):
     content: str
     created_at: datetime
     user: UserResponse
+
+
+class NotificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ticket_id: int
+    is_read: bool
+    created_at: datetime
+    ticket_title: str = ""
+    comment: TicketCommentResponse
+
+    @staticmethod
+    def from_notification(notification) -> "NotificationResponse":
+        response = NotificationResponse.model_validate(notification)
+        response.ticket_title = notification.ticket.title
+        return response

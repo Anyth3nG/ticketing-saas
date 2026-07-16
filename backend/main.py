@@ -29,6 +29,8 @@ def health():
 
 from routes.tickets import router as tickets_router
 from routes.users import router as users_router
+from routes.notifications import router as notifications_router
 
 app.include_router(tickets_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
