@@ -247,9 +247,18 @@ export default function ManagerDashboard() {
             <div key={worker.id} className="worker-box">
               <div className="worker-box-header">
                 <div className="worker-identity">
-                  <span className="worker-avatar" aria-hidden="true">
-                    {initials(worker.name)}
-                  </span>
+                  {worker.avatar_url ? (
+                    <img
+                      className="worker-avatar"
+                      src={worker.avatar_url}
+                      alt=""
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <span className="worker-avatar" aria-hidden="true">
+                      {initials(worker.name)}
+                    </span>
+                  )}
                   <h2>{worker.name}</h2>
                 </div>
                 <div className="worker-status-filter">

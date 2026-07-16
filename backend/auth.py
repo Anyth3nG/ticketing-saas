@@ -1,5 +1,6 @@
 # Validates Clerk JWT tokens from the Authorization header using Clerk's JWKS.
 import os
+from datetime import datetime, timedelta
 
 import httpx
 from fastapi import Depends, HTTPException
@@ -11,6 +12,13 @@ from database import get_db
 from models import User
 
 security = HTTPBearer()
+
+# How often an existing user's name/email/avatar gets refreshed from Clerk.
+# get_current_user runs on every request (including the frontend's own
+# polling), so this can't be a live fetch every time without hammering
+# Clerk's API -- an hourly refresh keeps profile changes showing up within
+# a normal work session without that cost.
+PROFILE_SYNC_INTERVAL = timedelta(hours=1)
 
 CLERK_FRONTEND_API = os.getenv("CLERK_FRONTEND_API", "")
 CLERK_ISSUER = (
@@ -51,7 +59,7 @@ def _get_signing_key(token: str) -> dict:
     return key
 
 
-def _fetch_clerk_profile(clerk_id: str) -> tuple[str | None, str | None]:
+def _fetch_clerk_profile(clerk_id: str) -> tuple[str | None, str | None, str | None]:
     response = httpx.get(
         f"{CLERK_BACKEND_API_URL}/users/{clerk_id}",
         headers={"Authorization": f"Bearer {CLERK_SECRET_KEY}"},
@@ -69,6 +77,7 @@ def _fetch_clerk_profile(clerk_id: str) -> tuple[str | None, str | None]:
         None,
     )
     name = " ".join(filter(None, [data.get("first_name"), data.get("last_name")])) or None
+    avatar_url = data.get("image_url")
 
     # Accounts created via username/password sign-up (no email collected)
     # have no email_addresses entry. users.email is NOT NULL + unique, so
@@ -78,7 +87,7 @@ def _fetch_clerk_profile(clerk_id: str) -> tuple[str | None, str | None]:
         email = email or f"{username}@no-email.local"
         name = name or username
 
-    return email, name
+    return email, name, avatar_url
 
 
 def get_current_user(
@@ -106,14 +115,40 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = db.query(User).filter(User.clerk_id == clerk_id).first()
+
     if user is not None:
+        stale = user.synced_at is None or (
+            datetime.utcnow() - user.synced_at > PROFILE_SYNC_INTERVAL
+        )
+        if stale:
+            try:
+                email, name, avatar_url = _fetch_clerk_profile(clerk_id)
+                if email:
+                    user.email = email
+                if name:
+                    user.name = name
+                user.avatar_url = avatar_url
+                user.synced_at = datetime.utcnow()
+                db.commit()
+                db.refresh(user)
+            except httpx.HTTPError:
+                # Clerk hiccup -- keep serving the request with the
+                # last-known profile rather than failing every route.
+                pass
         return user
 
-    email, name = _fetch_clerk_profile(clerk_id)
+    email, name, avatar_url = _fetch_clerk_profile(clerk_id)
     if not email or not name:
         raise HTTPException(status_code=401, detail="Clerk profile missing required fields")
 
-    user = User(clerk_id=clerk_id, email=email, name=name, role="worker")
+    user = User(
+        clerk_id=clerk_id,
+        email=email,
+        name=name,
+        avatar_url=avatar_url,
+        role="worker",
+        synced_at=datetime.utcnow(),
+    )
     db.add(user)
     db.commit()
     db.refresh(user)

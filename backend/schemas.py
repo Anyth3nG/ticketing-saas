@@ -16,6 +16,7 @@ class UserResponse(BaseModel):
     clerk_id: str
     email: str
     name: str
+    avatar_url: Optional[str] = None
     role: str
     created_at: datetime
 
