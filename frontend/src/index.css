@@ -58,6 +58,7 @@ h1 {
     margin: 20px 0;
   }
 }
+
 h2 {
   font-size: 24px;
   line-height: 118%;
@@ -108,17 +109,15 @@ code {
 }
 
 .navbar-logo {
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   display: block;
 }
 
-.navbar-title {
-  font-family: var(--heading);
-  font-weight: 600;
-  letter-spacing: -0.2px;
-  color: var(--text-h);
+.navbar-wordmark {
+  height: 26px;
+  width: auto;
 }
 
 .navbar-link {
@@ -219,7 +218,7 @@ select:focus-visible,
   display: inline-block;
   padding: 8px 16px;
   border-radius: 6px;
-  background: var(--accent);
+  background: #8e4ec6;
   color: #fff;
   text-decoration: none;
   cursor: pointer;
@@ -232,7 +231,7 @@ select:focus-visible,
 
 .btn:hover {
   border-color: transparent;
-  background: #9522f0;
+  background: #7c40b4;
 }
 
 .btn-soft {
@@ -587,6 +586,12 @@ form textarea {
   text-transform: capitalize;
 }
 
+.recurring-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .ticket-number {
   font-family: var(--mono);
   color: var(--text);
@@ -646,6 +651,33 @@ form textarea {
   color: #30a46c;
 }
 
+.stat-tile-with-action {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.stat-tile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-tile-filter-btn {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid rgba(48, 164, 108, 0.4);
+  border-radius: 4px;
+  background: transparent;
+  color: #30a46c;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stat-tile-filter-btn:hover {
+  background: rgba(48, 164, 108, 0.12);
+}
+
 .stat-tile-critical {
   border-color: rgba(229, 72, 77, 0.35);
   background: rgba(229, 72, 77, 0.08);
@@ -669,8 +701,21 @@ form textarea {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 999px;
+  background: none;
   font-size: 14px;
   color: var(--text);
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.status-legend-item:hover {
+  background: var(--code-bg);
+}
+
+.status-legend-item-inactive {
+  opacity: 0.45;
 }
 
 .manager-grid {
@@ -719,6 +764,16 @@ form textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.worker-ticket-count {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .worker-avatar {
