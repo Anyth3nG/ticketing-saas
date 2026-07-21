@@ -14,7 +14,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost",
         "http://localhost:5173",
-        "http://ticketing-saas-test.s3-website-eu-west-1.amazonaws.com",
+        "https://testing.max-cpa.co.il",
+        "https://workload.max-cpa.co.il",
     ],
     allow_credentials=True,
     allow_methods=["*"],
