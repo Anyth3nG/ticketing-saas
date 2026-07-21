@@ -73,6 +73,8 @@ jobs:
             # Ensures origin uses SSH auth (deploy key), self-heals if the instance repo was ever cloned over HTTPS
             git remote set-url origin git@github.com:Anyth3nG/ticketing-saas.git &&
             git pull origin main &&
+            API_DOMAIN=\$(echo '${{ vars.PROD_API_URL }}' | sed -E 's#^https?://##; s#/.*##') &&
+            sudo bash backend/deploy/setup_nginx_tls.sh \"\$API_DOMAIN\" '${{ vars.CERTBOT_EMAIL }}' &&
             source backend/venv/bin/activate &&
             pip install -r backend/requirements.txt &&
             cd backend && alembic upgrade head &&
