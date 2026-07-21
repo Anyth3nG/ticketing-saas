@@ -70,6 +70,23 @@ GitHub Actions was chosen for CI/CD because:
 
 ---
 
+## DNS/HTTPS: Cloudflare-proxied over ACM + ALB/CloudFront
+
+The original plan was AWS-native: ACM certificates on an ALB (backend) and CloudFront (frontend), with Route 53 for DNS. Switched to Cloudflare-proxied DNS instead:
+
+- An ALB costs ~$20-30/month — pure overhead for a single EC2 instance serving ~15 internal users, with no meaningful availability benefit at this scale
+- Cloudflare's free tier provides the same HTTPS-termination-at-the-edge behavior for both the S3 frontend and the EC2 backend, at no cost
+- DNS for `max-cpa.co.il` is already on Cloudflare (managed by an external IT company), so no migration was needed to use it
+
+Two constraints fell out of this choice that shaped the domain layout in [architecture.md](architecture.md):
+
+- **S3 website hosting has no domain-mapping layer** — without CloudFront in front, the bucket name must exactly match the custom domain (S3 matches the `Host` header directly to a bucket name), so the frontend buckets are named `testing.max-cpa.co.il` / `workload.max-cpa.co.il` rather than anything more conventional.
+- **Cloudflare's free Universal SSL cert only covers the apex + one wildcard level** (`max-cpa.co.il` + `*.max-cpa.co.il`). A 2-level subdomain like `api.testing.max-cpa.co.il` gets no certificate at all and fails TLS outright — hence the API domains are flattened to `api-testing.max-cpa.co.il` / `api-workload.max-cpa.co.il` instead of nesting under `testing`/`workload`.
+
+The EC2 origin's Nginx config deliberately serves identically on port 80 and port 443 (no forced HTTPS redirect), so it works under either Cloudflare SSL/TLS mode (Flexible connects to the origin on :80, Full on :443) without needing dashboard access to check or control which one is set.
+
+---
+
 ## Notifications & live updates: polling over WebSockets
 
 Ticket comments needed some form of notification, and dashboards needed to reflect other

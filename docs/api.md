@@ -7,8 +7,8 @@
 | Environment | URL |
 |---|---|
 | Dev | `http://localhost/api` |
-| Test | `https://api-test.clientdomain.com` |
-| Prod | `https://api.clientdomain.com` |
+| Test | `https://api-testing.max-cpa.co.il/api` |
+| Prod | `https://api-workload.max-cpa.co.il/api` |
 
 ## Authentication
 
@@ -235,6 +235,6 @@ Response: `204 No Content`.
 
 #### `GET /health`
 
-No auth required. Used by the ALB.
+No auth required.
 
 Response: `200 OK`, `{ "status": "ok" }`

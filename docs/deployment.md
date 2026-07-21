@@ -56,23 +56,16 @@ GitHub Actions
 
 ### S3
 
-- One bucket per environment: `ticketing-saas-test`, `ticketing-saas-prod`
-- Static website hosting enabled
-- Public read access (CloudFront only)
+- One bucket per environment, named to **exactly match its custom domain**: `testing.max-cpa.co.il`, `workload.max-cpa.co.il` — S3 static website hosting has no separate domain-mapping layer, it matches the bucket name directly against the incoming `Host` header, so a CNAME pointing at a differently-named bucket 404s with `NoSuchBucket`
+- Static website hosting enabled (`index.html` as both index and error document)
+- Public read bucket policy (`s3:GetObject` for `*`) — there's no CDN in front, so the bucket itself must serve public traffic
+- No CloudFront distribution
 
-### CloudFront
+### Nginx + TLS (on EC2)
 
-- One distribution per environment
-- Points to corresponding S3 bucket
-- Custom domain via Route 53
-- SSL via ACM certificate
+There's no ALB. Each EC2 instance runs Nginx as a reverse proxy in front of the FastAPI app (`:80`/`:443` → `127.0.0.1:8000`), with a Let's Encrypt certificate obtained via certbot. This is provisioned automatically on every deploy — see `backend/deploy/setup_nginx_tls.sh`, invoked from the `deploy-backend` job right after the code is pulled. It's idempotent (safe to re-run every deploy) and self-healing (a rebuilt EC2 instance gets nginx/certbot reprovisioned on its next deploy without manual setup).
 
-### ALB (Application Load Balancer)
-
-- One ALB per environment
-- Routes traffic to EC2
-- ACM SSL certificate attached
-- Health check on `/health` endpoint
+Nginx serves identically on port 80 and port 443 (no forced HTTP→HTTPS redirect) so it works correctly regardless of Cloudflare's SSL/TLS mode (Flexible connects to the origin on :80, Full connects on :443) — see [architecture.md](architecture.md) for why.
 
 ## GitHub Actions Secrets and Variables
 
@@ -81,6 +74,12 @@ GitHub Actions
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 EC2_SSH_KEY
+DATABASE_URL_TEST
+DATABASE_URL_PROD
+CLERK_SECRET_KEY
+CLERK_FRONTEND_API
+PROD_CLERK_SECRET_KEY
+PROD_CLERK_FRONTEND_API
 ```
 
 **Variables** (non-sensitive — set under Settings → Variables):
@@ -91,7 +90,14 @@ S3_BUCKET_PROD
 EC2_HOST_TEST
 EC2_HOST_PROD
 EC2_USER
+VITE_API_URL
+VITE_CLERK_PUBLISHABLE_KEY
+PROD_API_URL
+PROD_CLERK_PUBLISHABLE_KEY
+CERTBOT_EMAIL
 ```
+
+`VITE_API_URL`/`PROD_API_URL` also double as the source of truth for the Nginx/certbot domain — the deploy workflow strips the scheme and any path to derive the bare hostname passed into `setup_nginx_tls.sh`, so there's only one place to update the API domain per environment.
 
 ## Rollback
 
