@@ -7,6 +7,12 @@ set -euo pipefail
 DOMAIN="$1"
 EMAIL="$2"
 
+if [ -z "$DOMAIN" ] || [ -z "$EMAIL" ]; then
+  echo "ERROR: DOMAIN and EMAIL must both be non-empty (got DOMAIN='$DOMAIN' EMAIL='$EMAIL')." >&2
+  echo "Check the API_DOMAIN_TEST/API_DOMAIN_PROD/CERTBOT_EMAIL GitHub Actions variables." >&2
+  exit 1
+fi
+
 CONF_PATH="/etc/nginx/sites-available/ticketing-backend"
 TEMPLATE_PATH="$(dirname "$0")/nginx.conf.template"
 
@@ -19,9 +25,12 @@ if [ -n "$PACKAGES" ]; then
 fi
 
 # certbot rewrites this file in place to add the TLS server block, so only
-# lay down the plain-HTTP base config the first time -- re-templating on
-# every deploy would wipe out certbot's edits.
-if [ ! -f "$CONF_PATH" ]; then
+# lay down the plain-HTTP base config while that hasn't happened yet --
+# re-templating after certbot succeeds would wipe out its edits. Keying off
+# the ssl_certificate directive (not mere file existence) means a run that
+# fails before certbot completes -- e.g. an earlier bad DOMAIN/EMAIL value --
+# self-heals on retry instead of leaving a broken file in place forever.
+if ! sudo grep -q "ssl_certificate" "$CONF_PATH" 2>/dev/null; then
   sed "s/__DOMAIN__/${DOMAIN}/g" "$TEMPLATE_PATH" | sudo tee "$CONF_PATH" > /dev/null
   sudo ln -sf "$CONF_PATH" /etc/nginx/sites-enabled/ticketing-backend
   sudo rm -f /etc/nginx/sites-enabled/default
