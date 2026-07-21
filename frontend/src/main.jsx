@@ -21,7 +21,7 @@ function ProtectedRoute() {
 function SignInPage() {
   return (
     <div className="sign-in-page">
-      <SignIn />
+      <SignIn fallbackRedirectUrl="/" />
     </div>
   )
 }
