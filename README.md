@@ -10,11 +10,11 @@ An internal ticketing and work distribution system built for a small team of ~15
 | Backend | Python + FastAPI |
 | Database | PostgreSQL |
 | Auth | Clerk (Google OAuth) |
-| Frontend Hosting | AWS S3 + CloudFront |
-| Backend Hosting | AWS EC2 |
+| Frontend Hosting | AWS S3 (static website hosting) |
+| Backend Hosting | AWS EC2 + Nginx |
 | CI/CD | GitHub Actions |
-| Domain | Client's custom domain via Route 53 |
-| SSL | AWS ACM + ALB |
+| Domain / DNS | Cloudflare |
+| SSL | Cloudflare (edge) + Let's Encrypt (origin) |
 
 ## Quick Start (Local Development)
 
@@ -69,5 +69,5 @@ Use Nginx as a local proxy — see `docs/setup.md` for config.
 | Environment | Frontend | Backend | Purpose |
 |---|---|---|---|
 | Dev | Nginx (local VM) | Local FastAPI | Active development |
-| Test | S3 + CloudFront | EC2 | QA before release |
-| Prod | S3 + CloudFront | EC2 | Live client environment |
+| Test | S3 (behind Cloudflare) | EC2 | QA before release |
+| Prod | S3 (behind Cloudflare) | EC2 | Live client environment |

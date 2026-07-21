@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ticketing system is a full-stack web application with a decoupled frontend and backend, hosted on AWS. The frontend is served as a static site via S3 and CloudFront. The backend is a Python FastAPI application running persistently on EC2, connected to a local PostgreSQL database.
+The ticketing system is a full-stack web application with a decoupled frontend and backend, hosted on AWS with Cloudflare in front for DNS and HTTPS. The frontend is served as a static site directly from an S3 website endpoint. The backend is a Python FastAPI application running persistently on EC2 behind Nginx, connected to a local PostgreSQL database.
 
 ## System Diagram
 
@@ -10,22 +10,21 @@ The ticketing system is a full-stack web application with a decoupled frontend a
 User's Browser
       │
       ├─── loads app ──────────────────────────────────────────────────────►
-      │                                                              CloudFront (CDN)
+      │                                                        Cloudflare (proxied, edge TLS)
       │                                                                    │
-      │                                                              S3 Bucket
-      │                                                          (React static files)
+      │                                                          S3 website endpoint
+      │                                                          (bucket name == domain)
       │
-      └─── API calls to api.clientdomain.com ──────────────────────────────►
-                                                                    Route 53
-                                                                        │
-                                                                       ALB
-                                                              (Application Load Balancer)
+      └─── API calls to api-workload.max-cpa.co.il ────────────────────────►
+                                                            Cloudflare (proxied, edge TLS)
                                                                         │
                                                                     EC2 Instance
                                                                         │
                                                            ┌────────────┴────────────┐
-                                                           │        FastAPI           │
-                                                           │       (Python)           │
+                                                           │   Nginx (:80 / :443)     │
+                                                           │   Let's Encrypt cert     │
+                                                           │           │              │
+                                                           │  FastAPI (:8000)         │
                                                            │           │              │
                                                            │      PostgreSQL          │
                                                            │    (local to EC2)        │
@@ -34,21 +33,30 @@ User's Browser
 
 ## Domain Setup
 
-- `clientdomain.com` → CloudFront → S3 (React app)
-- `api.clientdomain.com` → Route 53 → ALB → EC2 (FastAPI)
-- SSL certificates managed by AWS ACM, attached to CloudFront and ALB
-- Client points their domain DNS to AWS via Route 53
+`max-cpa.co.il` is registered/managed by an external IT company (Compbiz); DNS is hosted on Cloudflare, proxied (orange-cloud) for all records except `clerk.max-cpa.co.il`.
+
+| Domain | Points to | Notes |
+|---|---|---|
+| `testing.max-cpa.co.il` | S3 website endpoint (test bucket) | CNAME target must be the bucket's own endpoint — S3 website hosting matches the bucket name to the `Host` header, so the bucket is named `testing.max-cpa.co.il` |
+| `workload.max-cpa.co.il` | S3 website endpoint (prod bucket) | Same constraint — bucket named `workload.max-cpa.co.il` |
+| `api-testing.max-cpa.co.il` | Test EC2 Elastic IP | Deliberately 1 level under the apex — Cloudflare's free Universal SSL only covers the apex + one wildcard level (`*.max-cpa.co.il`), not 2-level subdomains like `api.testing.max-cpa.co.il` |
+| `api-workload.max-cpa.co.il` | Prod EC2 Elastic IP | Same reason |
+| `clerk.max-cpa.co.il` | `frontend-api.clerk.services` | **DNS-only** (grey-cloud), not proxied — Clerk terminates its own TLS and verifies domain ownership directly against this CNAME; Cloudflare proxying breaks both |
+
+SSL: Cloudflare terminates HTTPS at the edge for every record (Universal SSL, free tier). For the two `api-*` records, Cloudflare also connects onward to the EC2 origin over HTTPS using a Let's Encrypt cert provisioned by `backend/deploy/setup_nginx_tls.sh` (see [deployment.md](deployment.md)) — but the origin's Nginx config intentionally serves identically on port 80 and port 443 (no forced redirect), so it works correctly regardless of whether Cloudflare's SSL/TLS mode for that hostname is set to Flexible or Full.
+
+No ALB, ACM, Route 53, or CloudFront are used — considered and rejected in favor of Cloudflare for cost reasons at this scale (~15 users, single EC2 per environment). See [decisions.md](decisions.md).
 
 ## Frontend
 
 - Built with React + Vite
 - In development: served by Nginx on local VM, proxied to local FastAPI
-- In test/prod: built via `npm run build`, uploaded to S3 by GitHub Actions, served via CloudFront
-- CloudFront handles caching and cache invalidation on each deploy
+- In test/prod: built via `npm run build`, uploaded to S3 by GitHub Actions, served directly from the bucket's static website endpoint (no CDN in front — Cloudflare's proxy provides edge caching/TLS instead)
 
 ## Backend
 
-- Python + FastAPI running on EC2
+- Python + FastAPI running on EC2, listening on `127.0.0.1:8000`
+- Nginx reverse-proxies `:80`/`:443` to the app and terminates TLS with a Let's Encrypt cert (see [deployment.md](deployment.md))
 - Managed by systemd (keeps the process alive 24/7, auto-restarts on crash)
 - All routes contained in a single FastAPI application
 - Connects to local PostgreSQL instance on the same EC2
@@ -78,7 +86,7 @@ See [deployment.md](deployment.md) for full pipeline details.
 
 | | Dev | Test | Prod |
 |---|---|---|---|
-| Frontend | Nginx (local VM) | S3 + CloudFront | S3 + CloudFront |
+| Frontend | Nginx (local VM) | S3 (behind Cloudflare) | S3 (behind Cloudflare) |
 | Backend | FastAPI (local VM) | EC2 | EC2 |
 | Database | PostgreSQL (local VM) | PostgreSQL (EC2) | PostgreSQL (EC2) |
 | Git branch | feature branches | staging | main |
