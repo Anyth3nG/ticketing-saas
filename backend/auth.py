@@ -6,6 +6,7 @@ import httpx
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -117,7 +118,13 @@ def get_current_user(
     if not clerk_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = db.query(User).filter(User.clerk_id == clerk_id).first()
+    try:
+        user = db.query(User).filter(User.clerk_id == clerk_id).first()
+    except SQLAlchemyError as exc:
+        # e.g. prod DB behind on migrations (missing avatar_url/synced_at
+        # columns) or unreachable -- surface a clean 503 instead of a raw
+        # 500 that strips CORS headers and looks like a browser CORS bug.
+        raise HTTPException(status_code=503, detail="Database error") from exc
 
     if user is not None:
         stale = user.synced_at is None or (
@@ -138,6 +145,11 @@ def get_current_user(
                 # Clerk hiccup -- keep serving the request with the
                 # last-known profile rather than failing every route.
                 pass
+            except SQLAlchemyError:
+                # DB failure during an opportunistic best-effort sync --
+                # roll back and serve the already-loaded row rather than
+                # failing the request over a profile refresh.
+                db.rollback()
         return user
 
     try:
@@ -156,7 +168,21 @@ def get_current_user(
         synced_at=datetime.utcnow(),
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent request for the same brand-new user (the frontend
+        # fires several API calls in parallel on load) already inserted this
+        # clerk_id. Roll back and use the row they created rather than
+        # failing this request on the unique-constraint violation.
+        db.rollback()
+        user = db.query(User).filter(User.clerk_id == clerk_id).first()
+        if user is None:
+            raise HTTPException(status_code=503, detail="Database error")
+        return user
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Database error") from exc
     db.refresh(user)
     return user
 
