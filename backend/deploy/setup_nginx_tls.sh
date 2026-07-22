@@ -23,6 +23,7 @@ fi
 SCRIPT_DIR="$(dirname "$0")"
 HTTP_CONF="/etc/nginx/sites-available/ticketing-backend"
 SSL_CONF="/etc/nginx/sites-available/ticketing-backend-ssl"
+DEFAULT_CONF="/etc/nginx/sites-available/ticketing-default"
 CERT_PATH="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
 
 PACKAGES=""
@@ -38,6 +39,11 @@ fi
 sed "s/__DOMAIN__/${DOMAIN}/g" "$SCRIPT_DIR/nginx.conf.template" | sudo tee "$HTTP_CONF" > /dev/null
 sudo ln -sf "$HTTP_CONF" /etc/nginx/sites-enabled/ticketing-backend
 sudo rm -f /etc/nginx/sites-enabled/default
+
+# Drops anything not addressed to $DOMAIN -- bare-IP requests that skip
+# Cloudflare, and scanner traffic -- before it can reach the app.
+sudo cp "$SCRIPT_DIR/nginx_default.conf" "$DEFAULT_CONF"
+sudo ln -sf "$DEFAULT_CONF" /etc/nginx/sites-enabled/ticketing-default
 
 sudo nginx -t
 sudo systemctl reload nginx 2>/dev/null || sudo systemctl restart nginx
