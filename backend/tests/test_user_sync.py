@@ -145,3 +145,62 @@ def test_concurrent_create_returns_existing_user(db, monkeypatch):
     result = auth.get_current_user(credentials=_creds(), db=db)
     assert result.clerk_id == "clerk_race"
     assert result.name == "Race Winner"
+
+
+def test_reissued_clerk_id_relinks_existing_user_by_email(db, monkeypatch):
+    # Switching Clerk instances (test -> prod) reissues a new clerk_id for the
+    # same person, so their existing row still carries the old one: the lookup
+    # misses and the INSERT collides on users.email. That used to 503 every
+    # request they made, permanently. The row must be re-linked to the new
+    # clerk_id instead, keeping its id and role.
+    existing = User(
+        clerk_id="clerk_old_instance",
+        email="daniel@example.com",
+        name="Daniel",
+        role="manager",
+        synced_at=datetime.utcnow(),
+    )
+    db.add(existing)
+    db.commit()
+    original_id = existing.id
+
+    _stub_jwt(monkeypatch, "clerk_new_instance")
+    monkeypatch.setattr(
+        auth,
+        "_fetch_clerk_profile",
+        lambda clerk_id: ("daniel@example.com", "Daniel", "https://img/avatar.png"),
+    )
+
+    result = auth.get_current_user(credentials=_creds(), db=db)
+
+    assert result.id == original_id
+    assert result.clerk_id == "clerk_new_instance"
+    assert result.role == "manager"  # privileges must survive the re-link
+
+
+def test_placeholder_email_does_not_relink_existing_user(db, monkeypatch):
+    # Placeholder emails are built from the Clerk username, which users can
+    # edit. Re-linking on one would let a worker rename themselves onto a
+    # manager's row and inherit the role, so these must never match.
+    existing = User(
+        clerk_id="clerk_manager",
+        email="boss@no-email.local",
+        name="Boss",
+        role="manager",
+        synced_at=datetime.utcnow(),
+    )
+    db.add(existing)
+    db.commit()
+
+    _stub_jwt(monkeypatch, "clerk_attacker")
+    monkeypatch.setattr(
+        auth,
+        "_fetch_clerk_profile",
+        lambda clerk_id: ("boss@no-email.local", "Boss", None),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        auth.get_current_user(credentials=_creds(), db=db)
+
+    assert exc_info.value.status_code == 503
+    assert db.query(User).filter(User.clerk_id == "clerk_manager").first().role == "manager"

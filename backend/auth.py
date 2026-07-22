@@ -178,6 +178,37 @@ def get_current_user(
         db.rollback()
         user = db.query(User).filter(User.clerk_id == clerk_id).first()
         if user is None:
+            # The collision was on email, not clerk_id: this person already has
+            # a row holding a stale clerk_id, because their Clerk identity was
+            # reissued (Clerk instance switched, or the Clerk user was deleted
+            # and recreated). Re-link that row to the new clerk_id -- otherwise
+            # every request they make 503s forever, since the lookup keeps
+            # missing and the INSERT keeps hitting users_email_key.
+            #
+            # This inherits the matched row's role, so email is being trusted
+            # as an identity claim. That holds only because sign-up is disabled
+            # on the Clerk instance and every account is provisioned by hand,
+            # so nobody can present a token for an email they weren't given.
+            # Re-enabling self-serve sign-up would make this a takeover path.
+            #
+            # Placeholder emails are excluded: they're derived from the Clerk
+            # username (see _fetch_clerk_profile), which is user-editable, so
+            # matching on one would let a worker claim another row by renaming.
+            user = None
+            if email and not email.endswith("@no-email.local"):
+                user = db.query(User).filter(User.email == email).first()
+            if user is not None:
+                user.clerk_id = clerk_id
+                user.name = name or user.name
+                user.avatar_url = avatar_url
+                user.synced_at = datetime.utcnow()
+                try:
+                    db.commit()
+                    db.refresh(user)
+                except SQLAlchemyError as exc:
+                    db.rollback()
+                    raise HTTPException(status_code=503, detail="Database error") from exc
+        if user is None:
             raise HTTPException(status_code=503, detail="Database error")
         return user
     except SQLAlchemyError as exc:
