@@ -7,7 +7,16 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+# The interactive docs publish every route, parameter and schema. That's
+# useful locally, but on a public origin it just hands an attacker the full
+# API surface, so serve them everywhere except prod.
+_is_prod = os.getenv("ENVIRONMENT") == "prod"
+
+app = FastAPI(
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
