@@ -36,8 +36,11 @@ _jwks_cache: dict | None = None
 
 def _fetch_jwks() -> dict:
     global _jwks_cache
-    response = httpx.get(CLERK_JWKS_URL, timeout=5)
-    response.raise_for_status()
+    try:
+        response = httpx.get(CLERK_JWKS_URL, timeout=5)
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Unable to reach Clerk to verify token") from exc
     _jwks_cache = response.json()
     return _jwks_cache
 
@@ -137,7 +140,10 @@ def get_current_user(
                 pass
         return user
 
-    email, name, avatar_url = _fetch_clerk_profile(clerk_id)
+    try:
+        email, name, avatar_url = _fetch_clerk_profile(clerk_id)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail="Unable to reach Clerk to create user profile") from exc
     if not email or not name:
         raise HTTPException(status_code=401, detail="Clerk profile missing required fields")
 
