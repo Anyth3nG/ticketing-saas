@@ -6,6 +6,7 @@ import './index.css'
 import App from './App.jsx'
 import WorkerDashboard from './pages/WorkerDashboard.jsx'
 import ManagerDashboard from './pages/ManagerDashboard.jsx'
+import ManagerWorkDashboard from './pages/ManagerWorkDashboard.jsx'
 import Archive from './pages/Archive.jsx'
 import { getCurrentUser } from './api/users.js'
 
@@ -69,6 +70,7 @@ createRoot(document.getElementById('root')).render(
               <Route path="/" element={<RoleRedirect />} />
               <Route path="/worker" element={<WorkerDashboard />} />
               <Route path="/manager" element={<ManagerDashboard />} />
+              <Route path="/manager/work" element={<ManagerWorkDashboard />} />
               <Route path="/archive" element={<Archive />} />
             </Route>
           </Route>

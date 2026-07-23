@@ -51,6 +51,40 @@ export async function updateTicketStatus(token, id, status) {
   return res.json();
 }
 
+export async function deleteTicket(token, id) {
+  const res = await fetch(`${API_URL}/tickets/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error("Failed to delete ticket");
+}
+
+export async function getRecurringTemplates(token) {
+  const res = await fetch(`${API_URL}/tickets/recurring-templates`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error("Failed to load recurring tickets");
+  return res.json();
+}
+
+export async function updateRecurringTemplate(token, id, data) {
+  const res = await fetch(`${API_URL}/tickets/recurring-templates/${id}`, {
+    method: "PUT",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to save recurring ticket");
+  return res.json();
+}
+
+export async function deleteRecurringTemplate(token, id) {
+  const res = await fetch(`${API_URL}/tickets/recurring-templates/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error("Failed to delete recurring ticket");
+}
+
 export async function createPersonalTicket(token, data) {
   const res = await fetch(`${API_URL}/tickets/personal`, {
     method: "POST",

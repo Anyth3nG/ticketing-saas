@@ -16,6 +16,7 @@ from schemas import (
     AssignmentCreate,
     PersonalTicketCreate,
     RecurringTemplateResponse,
+    RecurringTemplateUpdate,
     TicketCommentCreate,
     TicketCommentResponse,
     TicketCreate,
@@ -49,22 +50,25 @@ def _can_edit_ticket_fields(ticket: Ticket, user: User) -> bool:
 
 
 def _can_update_status(ticket: Ticket, user: User, new_status: str) -> bool:
+    if ticket.ticket_type == "personal" and ticket.created_by == user.id:
+        # Personal work never becomes assigned to_do work, and skips the
+        # approval step entirely -- the owner marks it done directly,
+        # manager or worker alike.
+        return new_status not in ("to_do", "awaiting_approval")
+
     if user.role == "manager":
-        # Managers' only status action is approving finished work.
+        # Managers' only status action on tickets they don't own is
+        # approving finished work.
         return ticket.status == "awaiting_approval" and new_status == "done"
 
     if not _can_view_ticket(ticket, user):
         return False
 
-    if ticket.ticket_type == "assigned":
-        # Assigned work never becomes personal work, and only a manager's
-        # approval can move it to done.
-        return new_status not in ("personal_work", "done")
-
-    # Personal work never becomes assigned to_do work, and skips the
-    # approval step entirely -- workers mark their own personal tickets
-    # done directly, never awaiting_approval.
-    return new_status not in ("to_do", "awaiting_approval")
+    # Only assigned tickets reach here: a personal ticket the caller owns was
+    # already handled above, and one they don't own already failed
+    # _can_view_ticket. Assigned work never becomes personal work, and only a
+    # manager's approval can move it to done.
+    return new_status not in ("personal_work", "done")
 
 
 def _get_ticket_or_404(db: Session, ticket_id: int) -> Ticket:
@@ -74,8 +78,22 @@ def _get_ticket_or_404(db: Session, ticket_id: int) -> Ticket:
     return ticket
 
 
-def _comment_recipients(ticket: Ticket, author_id: int) -> set[int]:
+def _can_delete_ticket(ticket: Ticket, user: User) -> bool:
+    # Managers remove the work they hand out; workers remove their own personal
+    # tickets. Neither can delete the other's.
+    if ticket.ticket_type == "personal":
+        return ticket.created_by == user.id
+    return user.role == "manager"
+
+
+def _comment_recipients(ticket: Ticket, author_id: int, db: Session) -> set[int]:
     recipients = {ticket.created_by, *(a.user_id for a in ticket.assignments)}
+    if ticket.ticket_type == "personal":
+        # Personal work has no assignee, so loop every manager in so either
+        # side can follow the thread and reply.
+        recipients |= {
+            u.id for u in db.query(User).filter(User.role == "manager").all()
+        }
     recipients.discard(author_id)
     return recipients
 
@@ -201,6 +219,96 @@ def list_tickets(
     return [TicketResponse.from_ticket(t) for t in tickets]
 
 
+# Registered before the /{ticket_id} routes below: an untyped path parameter
+# matches any string at the routing level (Starlette resolves routes in
+# registration order, then FastAPI coerces the segment to int), so a static
+# route like this one must come first or "recurring-templates" would be
+# swallowed as ticket_id and 422 on the int conversion.
+@router.get("/recurring-templates", response_model=list[RecurringTemplateResponse])
+def list_recurring_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(RecurringTicketTemplate)
+        .filter(
+            RecurringTicketTemplate.created_by == current_user.id,
+            RecurringTicketTemplate.active.is_(True),
+        )
+        .all()
+    )
+
+
+def _get_own_template_or_404(db: Session, template_id: int, user: User) -> RecurringTicketTemplate:
+    template = (
+        db.query(RecurringTicketTemplate)
+        .filter(RecurringTicketTemplate.id == template_id)
+        .first()
+    )
+    if template is None:
+        raise HTTPException(status_code=404, detail="Recurring ticket not found")
+    if template.created_by != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return template
+
+
+@router.put(
+    "/recurring-templates/{template_id}", response_model=RecurringTemplateResponse
+)
+def update_recurring_template(
+    template_id: int,
+    payload: RecurringTemplateUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    template = _get_own_template_or_404(db, template_id, current_user)
+
+    # Applies going forward only -- tickets already generated for past/current
+    # months keep the title/urgency they were created with, same as any other
+    # already-created ticket. Only future months' generate_due_recurring_tickets
+    # calls pick up the change.
+    template.title = payload.title
+    template.description = payload.description
+    template.urgency = payload.urgency
+    template.recurrence_day = payload.recurrence_day
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+@router.delete("/recurring-templates/{template_id}", status_code=204)
+def delete_recurring_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    template = _get_own_template_or_404(db, template_id, current_user)
+
+    # Deactivate rather than hard-delete: past months' completed tickets keep
+    # a valid template_id FK for Archive history, and generate_due_recurring_tickets
+    # already skips inactive templates, so nothing new is ever created for it.
+    template.active = False
+
+    # A full stop, not just "no more after this one" -- this month's
+    # not-yet-finished occurrence (if any) is removed together with the
+    # schedule. Already-done occurrences are untouched; they're history.
+    live_ticket = (
+        db.query(Ticket)
+        .filter(Ticket.template_id == template_id, Ticket.status != "done")
+        .first()
+    )
+    if live_ticket is not None:
+        db.query(Notification).filter(
+            Notification.ticket_id == live_ticket.id
+        ).delete()
+        db.query(TicketComment).filter(
+            TicketComment.ticket_id == live_ticket.id
+        ).delete()
+        db.delete(live_ticket)
+
+    db.commit()
+
+
 @router.get("/{ticket_id}", response_model=TicketResponse)
 def get_ticket(
     ticket_id: int,
@@ -293,7 +401,7 @@ def create_comment(
     db.add(comment)
     db.flush()
 
-    for recipient_id in _comment_recipients(ticket, current_user.id):
+    for recipient_id in _comment_recipients(ticket, current_user.id, db):
         db.add(
             Notification(
                 user_id=recipient_id, ticket_id=ticket.id, comment_id=comment.id
@@ -328,10 +436,25 @@ def list_comments(
 def delete_ticket(
     ticket_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_manager),
+    current_user: User = Depends(get_current_user),
 ):
     ticket = _get_ticket_or_404(db, ticket_id)
 
+    if ticket.is_recurring:
+        raise HTTPException(
+            status_code=400,
+            detail="Recurring tickets can only be removed by deleting the recurring "
+            "ticket itself, not a single occurrence.",
+        )
+
+    if not _can_delete_ticket(ticket, current_user):
+        raise HTTPException(status_code=403, detail="Not authorized to delete this ticket")
+
+    # notifications and comments both carry a NOT NULL ticket_id FK, so they
+    # have to go before the ticket itself or the delete FK-violates. A
+    # notification also references a comment, so it must be cleared first.
+    db.query(Notification).filter(Notification.ticket_id == ticket_id).delete()
+    db.query(TicketComment).filter(TicketComment.ticket_id == ticket_id).delete()
     db.query(TicketAssignment).filter(TicketAssignment.ticket_id == ticket_id).delete()
     db.delete(ticket)
     db.commit()

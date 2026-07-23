@@ -43,6 +43,7 @@ Team members. Synced from Clerk on login.
 | `role` | String | Not null — `manager` or `worker` |
 | `created_at` | DateTime | Not null, defaults to `utcnow` |
 | `synced_at` | DateTime | Nullable — last time `name`/`email`/`avatar_url` were refreshed from Clerk; null for rows created before this column existed, until their next sync |
+| `dashboard_layout` | JSON | Nullable — a manager's saved display order for worker boards on the Team Board, as a list of worker `id`s; null until they've customized it once. Only ever meaningful for managers. |
 
 `name`, `email`, and `avatar_url` are refreshed from Clerk in `get_current_user`
 (`backend/auth.py`), throttled to once per hour per user (`PROFILE_SYNC_INTERVAL`) rather than
@@ -128,8 +129,10 @@ Relationships:
 - `comment` — the `TicketComment` that triggered the notification
 
 Created for the ticket's creator and assignee(s), excluding whoever posted the comment
-(`_comment_recipients` in `routes/tickets.py`). `GET /api/notifications` only returns unread
-rows — once read, a notification no longer appears there. See [api.md](api.md).
+(`_comment_recipients` in `routes/tickets.py`). Personal tickets have no assignee, so for those
+every manager is a recipient instead — this applies equally whether the personal ticket
+belongs to a worker or to a manager's own "My Work" board. `GET /api/notifications` only
+returns unread rows — once read, a notification no longer appears there. See [api.md](api.md).
 
 ### `recurring_ticket_templates`
 
@@ -152,5 +155,12 @@ Relationships:
 - `creator` — the `User` who created the template (via `created_by`)
 - `assignee` — the `User` tickets are assigned to (via `assigned_to`)
 - `generated_tickets` — `Ticket` rows generated from this template
+
+"Deleting" a recurring ticket (`DELETE /api/tickets/recurring-templates/{id}`, see
+[api.md](api.md)) sets `active = false` rather than removing the row — `active.is_(True)` is
+already part of `generate_due_recurring_tickets`' filter, so an inactive template simply never
+generates again, while past **completed** `Ticket` rows keep a valid `template_id` foreign key
+for Archive history. The same call also deletes that template's current not-yet-`done`
+instance, if any.
 
 See [architecture.md](architecture.md) for the system overview.
