@@ -14,12 +14,12 @@ export const STATUS_LABELS = {
   done: "Done",
 };
 
-export default function StatusDot({ status }) {
+export default function StatusDot({ status, color, title }) {
   return (
     <span
       className="status-dot"
-      style={{ backgroundColor: STATUS_COLORS[status] || STATUS_COLORS.done }}
-      title={STATUS_LABELS[status] || status}
+      style={{ backgroundColor: color || STATUS_COLORS[status] || STATUS_COLORS.done }}
+      title={title || STATUS_LABELS[status] || status}
     />
   );
 }

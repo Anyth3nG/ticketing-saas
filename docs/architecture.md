@@ -71,12 +71,21 @@ No ALB, ACM, Route 53, or CloudFront are used — considered and rejected in fav
 
 ## Auth Flow
 
-1. User visits the app
-2. Clerk presents Google OAuth login
-3. User signs in with their Google account
-4. Clerk issues a JWT token to the frontend
-5. Frontend includes the JWT in every API request header
-6. FastAPI validates the JWT on each request before processing
+Accounts are provisioned by hand, not self-serve: a manager creates each user directly in
+Clerk with an initial password (which they update after first login), and sign-up is disabled
+on the Clerk instance — no unknown account can ever be created. See
+[decisions.md](decisions.md) for why.
+
+1. User visits the app and signs in with the email/password a manager gave them
+2. Clerk issues a JWT token to the frontend
+3. Frontend includes the JWT in every API request header
+4. FastAPI validates the JWT on each request before processing (full JWKS verification, no dev bypass)
+
+This matters beyond login: `get_current_user` (`backend/auth.py`) re-links a `users` row to a
+new Clerk `clerk_id` by matching on email when a person's Clerk identity is reissued (e.g. a
+Clerk instance switch), inheriting that row's role. That's only safe because sign-up is
+disabled — nobody can present a token for an email they weren't personally given one for. If
+self-serve sign-up were ever enabled, this becomes a privilege-escalation path.
 
 ## CI/CD
 

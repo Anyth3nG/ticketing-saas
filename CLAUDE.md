@@ -9,7 +9,7 @@ Internal ticketing and work distribution SaaS for a small team of ~15 users. All
 - **Frontend**: React + Vite
 - **Backend**: Python + FastAPI
 - **Database**: PostgreSQL (local to EC2)
-- **Auth**: Clerk (Google OAuth)
+- **Auth**: Clerk — accounts are provisioned by hand (manager sets an initial password per user); self-serve sign-up is disabled, so no unknown accounts can be created
 - **Hosting**: AWS S3 + CloudFront (frontend), AWS EC2 (backend)
 - **CI/CD**: GitHub Actions
 

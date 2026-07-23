@@ -34,17 +34,33 @@ Since the backend runs 24/7 on EC2, a local PostgreSQL instance on the same mach
 
 ---
 
-## Auth: Clerk + Google OAuth over AWS Cognito
+## Auth: Clerk, hand-provisioned accounts, over AWS Cognito
 
 Clerk was chosen over Cognito because:
 
-- Google OAuth setup is a single toggle in Clerk's dashboard
 - Clerk provides a hosted login page out of the box
 - JWT tokens are easy to validate in FastAPI
 - Free tier covers well beyond 15 users
 - Cognito configuration is complex and time-consuming for the same result
 
-Since all 15 users have Google accounts (internal team), Google OAuth is the natural choice — no passwords to manage.
+Google OAuth was tried initially but dropped: accounts are instead created by hand — a manager
+adds each team member directly in Clerk with an initial password, which they change after
+first login — and self-serve sign-up is disabled on the Clerk instance, so no account can ever
+be created that a manager didn't explicitly provision.
+
+This is more than a login-flow detail — it's load-bearing for a real security property.
+`get_current_user` (`backend/auth.py`) re-links a `users` row to a new Clerk `clerk_id` by
+matching on email whenever a person's Clerk identity is reissued (e.g. the app was pointed at a
+different Clerk instance), and that re-link inherits the row's role. Trusting an email match
+that way is only safe *because* sign-up is disabled — nobody can mint an account for an email
+they weren't personally handed one for. Re-enabling self-serve sign-up would turn this into a
+privilege-escalation path (register with someone else's email, inherit their role) and would
+need this logic revisited first.
+
+One open gap from this model: initial passwords have no forced-rotation or single-use
+enforcement in Clerk, so one stays valid indefinitely for anyone who doesn't get around to
+changing it, and the manager who set it knows it. Worth requiring MFA or switching to
+password-reset links (single-use) instead of directly-set passwords, if this becomes a concern.
 
 ---
 
@@ -122,6 +138,47 @@ an hour of that person's next request, which is fine for a name or photo, and a 
 failure during a refresh is swallowed rather than breaking the request.
 
 ---
+
+## Manager's "My Work" page: a standalone copy, not a shared component
+
+Managers needed their own personal-ticket board (`frontend/src/pages/ManagerWorkDashboard.jsx`,
+`/manager/work`), separate from the Team Board they use to oversee workers. It's currently a
+near-verbatim copy of `WorkerDashboard.jsx` — same 4-column kanban, same drag-and-drop, same
+create-ticket form — including two columns ("Managers Work", "Awaiting Approval") that are
+structurally always empty for a manager, since nothing can ever assign a ticket to a manager
+and personal tickets never reach `awaiting_approval`.
+
+This was a deliberate choice, not an oversight: the client asked for a like-for-like copy now,
+with an explicit plan to redesign this page's layout in a later iteration. Extracting a shared
+component between the two pages would mean less duplicated code today, but that shared piece
+would need to be pulled apart again the moment the manager page's layout actually diverges —
+paying an abstraction cost now for a shape we already know is temporary. A plain duplicate
+means the eventual redesign only ever touches one file and can't destabilize the worker board
+workers depend on daily. Revisit the shared-component question once the manager page's actual
+target layout is known.
+
+## Recurring tickets: the schedule is a separate, first-class thing from any month's ticket
+
+A recurring ticket is two things under the hood: a `RecurringTicketTemplate` (the schedule —
+title, urgency, day of month) and, at any given time, at most one materialized `Ticket` row
+generated from it for the current month (`generate_due_recurring_tickets`, see
+[api.md](api.md)). Marking that month's ticket done used to mean the whole recurring series
+visually vanished from the "All" view for the rest of the month — there was no way to tell it
+still existed, or to remove it short of deleting individual monthly instances (which didn't
+even work correctly: the next `GET /tickets` would silently regenerate whatever you'd just
+deleted, since generation only checks "does *a* ticket exist for this template this month," not
+whether one existed and was deleted).
+
+Fix: the template is now independently listable, editable, and deletable
+(`GET`/`PUT`/`DELETE /api/tickets/recurring-templates[/{id}]`), and the frontend's "All" tab
+shows exactly one persistent card per active template — never the live monthly ticket, which
+only appears under Today/Week/Month (due-date filtered, unchanged). This avoids showing the
+same series twice, and means "All" no longer loses a recurring series just because this
+month's occurrence was completed. Deleting is now only possible at the template level:
+`DELETE /api/tickets/{id}` rejects any recurring instance (`400`) — the schedule and the
+current unfinished occurrence are removed together, but past **completed** months are kept
+(the template is deactivated, not row-deleted, so their `template_id` foreign key stays valid
+for Archive history).
 
 ## Kubernetes: Not used
 

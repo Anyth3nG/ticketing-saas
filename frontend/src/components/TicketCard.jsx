@@ -1,5 +1,5 @@
 import { CommentIcon, RepeatIcon } from "./icons";
-import { formatDate } from "../utils/date";
+import { formatDate, todayISO } from "../utils/date";
 
 const URGENCY_COLORS = {
   low: "#30a46c",
@@ -8,6 +8,8 @@ const URGENCY_COLORS = {
 };
 
 export default function TicketCard({ ticket, onClick }) {
+  // Recurring tickets have no due_date; only flag a real, past date.
+  const isOverdue = ticket.due_date && ticket.due_date < todayISO();
   return (
     <div className="ticket-card" onClick={onClick}>
       <div className="ticket-card-header">
@@ -27,7 +29,9 @@ export default function TicketCard({ ticket, onClick }) {
             <RepeatIcon /> Recurring
           </span>
         )}
-        <span>Due {formatDate(ticket.due_date)}</span>
+        <span className={isOverdue ? "ticket-card-due-overdue" : undefined}>
+          Due {formatDate(ticket.due_date)}
+        </span>
         <span className="comment-count" title="Comments">
           <CommentIcon /> {ticket.comment_count}
         </span>
