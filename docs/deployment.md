@@ -67,6 +67,18 @@ There's no ALB. Each EC2 instance runs Nginx as a reverse proxy in front of the 
 
 Nginx serves identically on port 80 and port 443 (no forced HTTP→HTTPS redirect) so it works correctly regardless of Cloudflare's SSL/TLS mode (Flexible connects to the origin on :80, Full connects on :443) — see [architecture.md](architecture.md) for why.
 
+`setup_nginx_tls.sh` also installs `backend/deploy/nginx_default.conf` as the catch-all `default_server` on both `:80` and `:443` (`ticketing-default` in `sites-enabled`, alongside `ticketing-backend`/`ticketing-backend-ssl`). Anything whose `Host` doesn't match the API domain — a scanner hitting the bare Elastic IP directly, or the constant background of vulnerability-scanning bots probing by IP — gets a `444` (connection closed, no response) on `:80` and a rejected TLS handshake on `:443`, before it ever reaches FastAPI. This is self-healing the same way the rest of this script is: it reinstalls on every deploy.
+
+**What this does *not* close**: a request that already knows the real domain and sends the correct `Host`/SNI still reaches the origin directly, bypassing Cloudflare (and any WAF/rate-limiting configured there) entirely. Closing that requires restricting the security group's `80`/`443` ingress to Cloudflare's published IP ranges — considered, deliberately not done yet (would need re-doing if the DNS record is ever grey-clouded), tracked as an open item.
+
+### Firewall (Security Group)
+
+Inbound: `22` (SSH), `80`, `443` — open to `0.0.0.0/0`. Port `8000` (the FastAPI app itself) is
+**not** open at the security-group level, and the app additionally binds only to
+`127.0.0.1:8000` (see systemd unit below) — belt-and-suspenders, either alone would already
+prevent reaching uvicorn directly from the internet, skipping nginx, TLS, and Cloudflare
+entirely.
+
 ## GitHub Actions Secrets and Variables
 
 **Secrets** (sensitive — set under Settings → Secrets):
@@ -121,10 +133,9 @@ sudo systemctl restart ticketing-backend
 
 ## systemd Service (EC2)
 
-FastAPI runs as a systemd service on EC2:
+FastAPI runs as a systemd service on EC2. The base unit (`/etc/systemd/system/ticketing-backend.service`) is:
 
 ```ini
-# /etc/systemd/system/ticketing-backend.service
 [Unit]
 Description=Ticketing System FastAPI Backend
 After=network.target
@@ -139,3 +150,26 @@ EnvironmentFile=/app/backend/.env
 [Install]
 WantedBy=multi-user.target
 ```
+
+A drop-in at `/etc/systemd/system/ticketing-backend.service.d/override.conf` overrides two things on both the test and prod EC2 instances:
+
+```ini
+[Unit]
+# Postgres runs on the same instance; without this, a reboot can start
+# uvicorn before Postgres is accepting connections, and every DB-backed route
+# 503s until the app is restarted (pool_pre_ping on the SQLAlchemy engine
+# also guards against this independently — see database.py).
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+ExecStart=
+ExecStart=/app/backend/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+**This drop-in is not in the repo and is not applied by any deploy step** — unlike
+`setup_nginx_tls.sh`, which reprovisions nginx from scratch on every deploy, nothing
+recreates this override if an EC2 instance is rebuilt or replaced. A fresh instance would come
+up with the base unit's `--host 0.0.0.0` and no Postgres ordering until someone manually
+reapplies both. Worth moving into `backend/deploy/` and wiring into the deploy script so it
+self-heals the same way nginx does.

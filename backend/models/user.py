@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import JSON, Column, DateTime, Integer, String
 
 from database import Base
 
@@ -18,3 +18,7 @@ class User(Base):
     # Last time name/email/avatar_url were refreshed from Clerk -- null for
     # rows created before this column existed, until their next sync.
     synced_at = Column(DateTime, nullable=True)
+    # Manager's preferred order of worker boards on their dashboard: a JSON
+    # array of worker user ids. Only ever set for managers; null means the
+    # dashboard falls back to its default order.
+    dashboard_layout = Column(JSON, nullable=True)

@@ -255,6 +255,7 @@ select:focus-visible,
   border-color: #30a46c;
 }
 
+
 .page-header-actions {
   display: flex;
   align-items: center;
@@ -567,6 +568,11 @@ form textarea {
   color: var(--text);
 }
 
+.ticket-card-due-overdue {
+  color: #e5484d;
+  font-weight: 700;
+}
+
 .comment-count {
   display: inline-flex;
   align-items: center;
@@ -861,7 +867,70 @@ form textarea {
   font-weight: 700;
 }
 
+/* Awaiting-approval tickets: a green checkmark box stands in for the status
+   dot -- green so it still reads as the green status, and clickable to approve. */
+.worker-ticket-approve {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  /* The 18px box is wider than the 10px status dot; centre it over the dot's
+     slot so it lines up with the dots in the other rows. */
+  margin: 0 -4px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid #30a46c;
+  background: #30a46c;
+  color: #fff;
+  cursor: pointer;
+}
+
+.worker-ticket-approve svg {
+  width: 13px;
+  height: 13px;
+}
+
+.worker-ticket-approve:hover {
+  background: #2b9560;
+  border-color: #2b9560;
+}
+
 /* Archive */
+
+.archive-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.archive-sort-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Compact, content-width tabs (the shared .tab-bar stretches full width). */
+.archive-sort-tabs {
+  width: auto;
+}
+
+.archive-sort-tabs .tab {
+  flex: none;
+  padding: 4px 12px;
+}
+
+.archive-filter-select {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-h);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
 
 .archive-list {
   list-style: none;
@@ -967,8 +1036,20 @@ form textarea {
   flex: 1;
 }
 
-.modal-edit-btn {
+.modal-edit-btn,
+.modal-delete-btn {
   flex-shrink: 0;
+}
+
+.modal-delete-btn {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #fff;
+}
+
+.modal-delete-btn:hover:not(:disabled) {
+  background: #d33b40;
+  border-color: #d33b40;
 }
 
 .modal-details p {
@@ -978,6 +1059,56 @@ form textarea {
 .modal-form-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Dashboard layout editor */
+
+.modal-layout-editor {
+  width: 720px;
+}
+
+.layout-editor-hint {
+  color: var(--text);
+  font-size: 13px;
+  margin: 4px 0 16px;
+}
+
+.layout-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 600px) {
+  .layout-editor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.layout-editor-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.layout-editor-box:active {
+  cursor: grabbing;
+}
+
+.layout-editor-box-name {
+  font-weight: 600;
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-changer {

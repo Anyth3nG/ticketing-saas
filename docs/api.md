@@ -18,7 +18,10 @@ All protected endpoints require a Clerk JWT token in the Authorization header:
 Authorization: Bearer <clerk_jwt_token>
 ```
 
-Clerk issues this token after the user signs in with Google OAuth. The frontend includes it automatically on every API request.
+Clerk issues this token after the user signs in with the email/password a manager created for
+them — accounts are provisioned by hand and self-serve sign-up is disabled (see
+[decisions.md](decisions.md)), not Google OAuth. The frontend includes the token automatically
+on every API request.
 
 ## Interactive Docs
 
@@ -47,7 +50,17 @@ Response: `200 OK`, `list[UserResponse]`
 
 Get the currently authenticated user.
 
-Response: `200 OK`, `UserResponse`
+Response: `200 OK`, `UserResponse` (includes `dashboard_layout`, see below)
+
+#### `PUT /api/users/me/dashboard-layout`
+
+Save a manager's preferred display order for the worker boards on their Team Board. **Managers
+only**. Any id in `worker_order` that isn't a current worker (a removed account, or a forged
+id) is silently dropped rather than trusted outright.
+
+Request body (`DashboardLayoutUpdate`): `{ "worker_order": [<user_id>, ...] }`.
+
+Response: `200 OK`, `UserResponse` with the saved `dashboard_layout`.
 
 ### Tickets
 
@@ -90,10 +103,11 @@ FastAPI/Swagger can't express a union — see the route's docstring in `routes/t
 
 - `is_recurring: false` — a `Ticket` is created immediately with `status: "personal_work"`.
   Response: `201 Created`, `TicketResponse`.
-- `is_recurring: true` — a `RecurringTicketTemplate` is created (`id`, `title`, `ticket_type`,
-  `recurrence_day`, `active`). No `Ticket` row exists yet; it's materialized lazily by
-  `generate_due_recurring_tickets` the next time `GET /api/tickets` runs, same mechanism as
-  assigned recurring tickets. Response: `201 Created`, `RecurringTemplateResponse`.
+- `is_recurring: true` — a `RecurringTicketTemplate` is created (see
+  `RecurringTemplateResponse` under "Recurring tickets" below for its shape). No `Ticket` row
+  exists yet; it's materialized lazily by `generate_due_recurring_tickets` the next time
+  `GET /api/tickets` runs, same mechanism as assigned recurring tickets. Response:
+  `201 Created`, `RecurringTemplateResponse`.
 
 `400` if `is_recurring` doesn't match which of `due_date`/`recurrence_day` was provided.
 
@@ -164,11 +178,14 @@ Update just a ticket's status.
 
 Request body (`TicketStatusUpdate`): `{ "status": "..." }`, one of `to_do`, `personal_work`, `working_on`, `awaiting_approval`, `done`.
 
-- Managers: can only approve — move a ticket from `awaiting_approval` to `done`. Any other
-  status value, or a source status other than `awaiting_approval`, is `403`.
-- Workers: free movement between any of the 5 statuses, no enforced sequence (e.g. a `done`
-  ticket can go straight back to `to_do`), on tickets they're assigned to or personal tickets
-  they created.
+- On a personal ticket the caller created (`ticket_type = "personal"` and `created_by =
+  <them>`): free movement between any of the 5 statuses, no enforced sequence (e.g. a `done`
+  ticket can go straight back to `to_do`) — applies equally to a worker's own personal ticket
+  and a **manager's** own personal ticket (their "My Work" board).
+- Managers, on anyone else's ticket: can only approve — move a ticket from `awaiting_approval`
+  to `done`. Any other status value, or a source status other than `awaiting_approval`, is `403`.
+- Workers, on tickets they're assigned to: free movement between any of the 5 statuses, same as
+  above.
 
 Response: `200 OK`, `TicketResponse`. `403` if not authorized on the ticket. `404` if the ticket doesn't exist.
 
@@ -199,15 +216,63 @@ Response: `200 OK`, `list[TicketCommentResponse]`. `404` if the ticket doesn't e
 
 #### `DELETE /api/tickets/{id}`
 
-Delete a ticket and its assignments. **Managers only**.
+Delete a ticket, its assignments, its comments, and any notifications pointing at it.
 
-Response: `204 No Content`. `404` if the ticket doesn't exist.
+- Managers: only tickets they handed out (`ticket_type = "assigned"`) — not a worker's personal
+  ticket.
+- Any user (manager or worker): only their own personal tickets (`ticket_type = "personal"` and
+  `created_by = <them>`).
+
+`400` if the ticket is a recurring instance (`is_recurring: true`) — recurring tickets can only
+be removed via `DELETE /api/tickets/recurring-templates/{id}` below, never one occurrence at a
+time. `403` if not authorized to delete this specific ticket. `404` if it doesn't exist.
+
+Response: `204 No Content`.
+
+### Recurring tickets
+
+A recurring ticket is a `RecurringTicketTemplate` (the schedule) plus, at any given time, at
+most one materialized `Ticket` row generated from it (`template_id`, `is_recurring: true`) —
+see [database.md](database.md). `GET /api/tickets` generates that month's instance lazily (see
+above); these three endpoints manage the template itself.
+
+#### `GET /api/tickets/recurring-templates`
+
+List the current user's own active recurring templates.
+
+Response: `200 OK`, `list[RecurringTemplateResponse]` (`id`, `title`, `description`,
+`ticket_type`, `urgency`, `recurrence_day`, `active`, `created_by`).
+
+#### `PUT /api/tickets/recurring-templates/{id}`
+
+Edit a recurring template's `title`/`description`/`urgency`/`recurrence_day`. Owner only —
+`403` for anyone else. Applies going forward only: tickets already generated for past or the
+current month keep the values they were created with, the same as any other already-created
+ticket; only future months pick up the change.
+
+Request body (`RecurringTemplateUpdate`): `title` (required), `description` (optional),
+`urgency` (required), `recurrence_day` (required, 1-31).
+
+Response: `200 OK`, `RecurringTemplateResponse`. `403` if not the owner. `404` if it doesn't exist.
+
+#### `DELETE /api/tickets/recurring-templates/{id}`
+
+Stop a recurring ticket. Owner only. Sets `active = false` (soft delete, not a row removal —
+`generate_due_recurring_tickets` skips inactive templates, and past **completed** instances
+keep a valid `template_id` foreign key for Archive history) **and** deletes this month's
+not-yet-`done` instance, if one exists, together with its comments/notifications — a full stop,
+not just "no more after this one." Already-`done` instances from past months are untouched.
+
+Response: `204 No Content`. `403` if not the owner. `404` if it doesn't exist.
 
 ### Notifications
 
 In-app notifications for ticket comments. A notification is created for a ticket's creator and
 assignee(s) whenever someone else posts a comment on it (see `POST /api/tickets/{id}/comments`
-above) — the commenter themselves is never notified of their own comment.
+above) — the commenter themselves is never notified of their own comment. Personal tickets have
+no assignee, so for those every manager is notified instead, so either side can pick up the
+thread — this applies whether the personal ticket belongs to a worker or to a manager's own "My
+Work" board.
 
 #### `GET /api/notifications`
 

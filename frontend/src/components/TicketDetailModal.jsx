@@ -3,13 +3,14 @@ import { useAuth } from "@clerk/react";
 import {
   assignTicket,
   createComment,
+  deleteTicket,
   getComments,
   getTicket,
   updateTicket,
   updateTicketStatus,
 } from "../api/tickets";
 import StatusDot, { STATUS_LABELS } from "./StatusDot";
-import { CheckIcon, EditIcon } from "./icons";
+import { CheckIcon, EditIcon, TrashIcon } from "./icons";
 import { formatDate, formatDateTime, formatTimestampDate } from "../utils/date";
 
 const URGENCY_OPTIONS = ["low", "medium", "high"];
@@ -31,6 +32,7 @@ export default function TicketDetailModal({
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -77,6 +79,20 @@ export default function TicketDetailModal({
       onChanged?.();
     } catch {
       setStatus("error");
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm("Delete this ticket? This can't be undone.")) return;
+    setDeleting(true);
+    try {
+      const token = await getToken();
+      await deleteTicket(token, ticketId);
+      onChanged?.();
+      onClose();
+    } catch {
+      setStatus("error");
+      setDeleting(false);
     }
   }
 
@@ -137,11 +153,24 @@ export default function TicketDetailModal({
     ticket?.ticket_type === "assigned" &&
     workers?.length > 0;
 
+  // Managers remove the work they handed out; workers remove their own
+  // personal tickets. Recurring instances are never individually deletable --
+  // that only happens via the recurring ticket itself, in the All tab.
+  const showDelete =
+    !readOnly &&
+    !ticket?.is_recurring &&
+    ((isManager && ticket?.ticket_type === "assigned") ||
+      (ticket?.ticket_type === "personal" &&
+        ticket?.created_by === currentUser?.id));
+
   const showApprove = !readOnly && isManager && ticket?.status === "awaiting_approval";
+  // Ownership-based, not role-based -- a manager also has personal tickets of
+  // their own now, and should see this on those; still correctly hidden when
+  // a manager is just viewing a worker's personal ticket.
   const showPersonalDone =
     !readOnly &&
-    !isManager &&
     ticket?.ticket_type === "personal" &&
+    ticket?.created_by === currentUser?.id &&
     ticket?.status !== "done";
 
   return (
@@ -181,6 +210,18 @@ export default function TicketDetailModal({
                   title="Edit ticket"
                 >
                   <EditIcon />
+                </button>
+              )}
+              {!editing && showDelete && (
+                <button
+                  type="button"
+                  className="icon-btn modal-delete-btn"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  aria-label="Delete ticket"
+                  title="Delete ticket"
+                >
+                  <TrashIcon />
                 </button>
               )}
             </div>
@@ -249,6 +290,7 @@ export default function TicketDetailModal({
                   Due date
                   <input
                     type="date"
+                    lang="en-GB"
                     value={form.due_date}
                     onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                     required
