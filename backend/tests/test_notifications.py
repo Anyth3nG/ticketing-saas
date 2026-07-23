@@ -30,6 +30,42 @@ def test_comment_notifies_the_other_party_but_not_the_author(app_client):
     assert resp.json() == []
 
 
+def test_personal_ticket_comment_notifies_managers(app_client):
+    # Personal work has no assignee, but a comment on it should still reach the
+    # managers so either side can communicate.
+    client, db, login_as = app_client
+    manager = make_user(db, "manager")
+    worker = make_user(db, "worker")
+    ticket = make_ticket(
+        db, creator=worker, ticket_type="personal", status="personal_work"
+    )
+
+    login_as(worker)
+    resp = client.post(
+        f"/api/tickets/{ticket.id}/comments", json={"content": "need input"}
+    )
+    assert resp.status_code == 201
+
+    login_as(manager)
+    notifications = client.get("/api/notifications/").json()
+    assert len(notifications) == 1
+    assert notifications[0]["ticket_id"] == ticket.id
+    assert notifications[0]["comment"]["content"] == "need input"
+    client.post("/api/notifications/read-all")
+
+    # A manager's reply notifies the worker back, but not the author manager.
+    resp = client.post(
+        f"/api/tickets/{ticket.id}/comments", json={"content": "here you go"}
+    )
+    assert resp.status_code == 201
+    assert client.get("/api/notifications/").json() == []
+
+    login_as(worker)
+    replies = client.get("/api/notifications/").json()
+    assert len(replies) == 1
+    assert replies[0]["comment"]["content"] == "here you go"
+
+
 def test_mark_notification_read(app_client):
     client, db, login_as = app_client
     manager = make_user(db, "manager")

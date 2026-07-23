@@ -14,6 +14,7 @@ export default function Navbar() {
   const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
   const isDashboard = DASHBOARD_PATHS.includes(pathname);
   const isArchive = pathname === "/archive";
+  const isMyWork = pathname === "/manager/work";
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +41,14 @@ export default function Navbar() {
       >
         Dashboard
       </Link>
+      {role === "manager" && (
+        <Link
+          className={"navbar-link" + (isMyWork ? " navbar-link-active" : "")}
+          to="/manager/work"
+        >
+          My Work
+        </Link>
+      )}
       <Link
         className={"navbar-link" + (isArchive ? " navbar-link-active" : "")}
         to="/archive"

@@ -19,6 +19,11 @@ class UserResponse(BaseModel):
     avatar_url: Optional[str] = None
     role: str
     created_at: datetime
+    dashboard_layout: Optional[list[int]] = None
+
+
+class DashboardLayoutUpdate(BaseModel):
+    worker_order: list[int]
 
 
 class TicketCreate(BaseModel):
@@ -85,9 +90,19 @@ class RecurringTemplateResponse(BaseModel):
 
     id: int
     title: str
+    description: Optional[str] = None
     ticket_type: str
+    urgency: Urgency
     recurrence_day: int
     active: bool
+    created_by: int
+
+
+class RecurringTemplateUpdate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    urgency: Urgency
+    recurrence_day: int = Field(ge=1, le=31)
 
 
 class AssignmentCreate(BaseModel):

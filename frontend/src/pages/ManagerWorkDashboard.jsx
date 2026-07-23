@@ -23,6 +23,12 @@ import RecurringTemplateModal from "../components/RecurringTemplateModal";
 import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
 import { todayISO } from "../utils/date";
 
+// This page is a deliberate, standalone copy of WorkerDashboard.jsx rather
+// than a shared component: the client wants a manager's own work board to
+// look identical to a worker's board for now, but expects the layout to
+// diverge in a later iteration. Keeping it separate means that redesign only
+// ever touches this file.
+
 const COLUMNS = ["to_do", "personal_work", "working_on", "awaiting_approval"];
 const URGENCY_OPTIONS = ["low", "medium", "high"];
 const PERSONAL_TABS = [
@@ -212,7 +218,7 @@ function CreatePersonalTicketForm({ onClose, onCreated }) {
   );
 }
 
-export default function WorkerDashboard() {
+export default function ManagerWorkDashboard() {
   const { getToken } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -243,12 +249,21 @@ export default function WorkerDashboard() {
         getTickets(token),
         getRecurringTemplates(token),
       ]);
-      if (currentUser.role !== "worker") {
-        navigate("/manager", { replace: true });
+      if (currentUser.role !== "manager") {
+        navigate("/worker", { replace: true });
         return;
       }
       setUser(currentUser);
-      setTickets(ticketList);
+      // GET /tickets/ returns every ticket in the system to a manager
+      // (needed for the Team Board), so this page -- which only ever shows
+      // the manager's own personal work -- has to filter it down itself.
+      // getRecurringTemplates is already scoped server-side to this user's
+      // own templates, so it needs no equivalent filtering here.
+      setTickets(
+        ticketList.filter(
+          (t) => t.ticket_type === "personal" && t.created_by === currentUser.id
+        )
+      );
       setTemplates(templateList);
       setStatus("ready");
     } catch {
@@ -322,7 +337,7 @@ export default function WorkerDashboard() {
   return (
     <div>
       <div className="page-header">
-        <h1>My Board</h1>
+        <h1>My Work</h1>
         <div className="page-header-actions">
           <button className="btn" onClick={() => setShowCreateForm(true)}>
             Create personal ticket

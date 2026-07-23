@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { createTicket, getTickets } from "../api/tickets";
+import { createTicket, getTickets, updateTicketStatus } from "../api/tickets";
 import { getCurrentUser, getUsers } from "../api/users";
 import TicketDetailModal from "../components/TicketDetailModal";
+import DashboardLayoutEditor from "../components/DashboardLayoutEditor";
 import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
-import { AlertIcon } from "../components/icons";
+import { AlertIcon, CheckIcon } from "../components/icons";
 import { formatDate, todayISO } from "../utils/date";
+import { initials } from "../utils/format";
 
 const LEGEND_STATUSES = ["to_do", "personal_work", "working_on", "awaiting_approval"];
 const URGENCY_OPTIONS = ["low", "medium", "high"];
@@ -16,13 +18,17 @@ const ALL_STATUSES_VISIBLE = LEGEND_STATUSES.reduce(
   {}
 );
 
-function initials(name) {
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0].toUpperCase())
-    .join("");
+// A manager's saved dashboard_layout is a list of worker ids in display
+// order. Workers not in it (new hires, or no layout saved yet) sort after
+// the ones that are, in a stable id order.
+function applyDashboardOrder(workerList, layout) {
+  if (!layout || layout.length === 0) return workerList;
+  const rank = new Map(layout.map((id, i) => [id, i]));
+  return [...workerList].sort((a, b) => {
+    const ra = rank.has(a.id) ? rank.get(a.id) : Infinity;
+    const rb = rank.has(b.id) ? rank.get(b.id) : Infinity;
+    return ra !== rb ? ra - rb : a.id - b.id;
+  });
 }
 
 function CreateTicketForm({ workers, onClose, onCreated }) {
@@ -89,6 +95,7 @@ function CreateTicketForm({ workers, onClose, onCreated }) {
             Due date
             <input
               type="date"
+              lang="en-GB"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               required
@@ -132,6 +139,7 @@ export default function ManagerDashboard() {
   const [openTicketId, setOpenTicketId] = useState(null);
   const [statusFilters, setStatusFilters] = useState({});
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showLayoutEditor, setShowLayoutEditor] = useState(false);
 
   useEffect(() => {
     const ticketParam = searchParams.get("ticket");
@@ -197,8 +205,21 @@ export default function ManagerDashboard() {
         return;
       }
       setUser(currentUser);
-      setTickets(ticketList);
-      setWorkers(userList.filter((u) => u.role === "worker"));
+      // GET /tickets/ returns everything to a manager, including their own
+      // personal work (the "My Work" page) -- exclude it here so it never
+      // inflates the oversight stat tiles (worker boxes already exclude it
+      // naturally, since its created_by never matches a worker.id).
+      setTickets(
+        ticketList.filter(
+          (t) => !(t.ticket_type === "personal" && t.created_by === currentUser.id)
+        )
+      );
+      setWorkers(
+        applyDashboardOrder(
+          userList.filter((u) => u.role === "worker"),
+          currentUser.dashboard_layout
+        )
+      );
       setStatus("ready");
     } catch {
       setStatus("error");
@@ -210,6 +231,22 @@ export default function ManagerDashboard() {
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
   }, [load]);
+
+  const handleQuickApprove = async (ticketId) => {
+    try {
+      const token = await getToken();
+      await updateTicketStatus(token, ticketId, "done");
+      load();
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  const handleLayoutSaved = (newOrder) => {
+    setUser((prev) => ({ ...prev, dashboard_layout: newOrder }));
+    setWorkers((prev) => applyDashboardOrder(prev, newOrder));
+    setShowLayoutEditor(false);
+  };
 
   if (!user && status === "loading") return <p className="state-message">Loading dashboard…</p>;
   if (!user && status === "error") return <p className="state-message">Failed to load dashboard.</p>;
@@ -223,6 +260,9 @@ export default function ManagerDashboard() {
       <div className="page-header">
         <h1>Team Board</h1>
         <div className="page-header-actions">
+          <button type="button" className="btn-soft" onClick={() => setShowLayoutEditor(true)}>
+            Change Layout
+          </button>
           <button type="button" className="btn" onClick={() => setShowCreateForm(true)}>
             Create Ticket
           </button>
@@ -333,13 +373,24 @@ export default function ManagerDashboard() {
                   const isOverdue = ticket.due_date < today;
                   return (
                     <li key={ticket.id} className="worker-ticket-row">
+                      {ticket.status === "awaiting_approval" ? (
+                        <button
+                          type="button"
+                          className="worker-ticket-approve"
+                          onClick={() => handleQuickApprove(ticket.id)}
+                          aria-label="Approve and mark done"
+                          title="Approve and mark done"
+                        >
+                          <CheckIcon />
+                        </button>
+                      ) : (
+                        <StatusDot status={ticket.status} />
+                      )}
                       <button
                         type="button"
                         className="worker-ticket-title"
                         onClick={() => setOpenTicketId(ticket.id)}
                       >
-                        <StatusDot status={ticket.status} />
-                        <span className="ticket-number">#{ticket.id}</span>
                         <span className="worker-ticket-title-text">{ticket.title}</span>
                       </button>
                       <span
@@ -371,6 +422,14 @@ export default function ManagerDashboard() {
           workers={workers}
           onClose={() => setShowCreateForm(false)}
           onCreated={load}
+        />
+      )}
+
+      {showLayoutEditor && (
+        <DashboardLayoutEditor
+          workers={workers}
+          onClose={() => setShowLayoutEditor(false)}
+          onSaved={handleLayoutSaved}
         />
       )}
     </div>
