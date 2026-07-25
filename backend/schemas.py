@@ -123,6 +123,12 @@ class TicketCommentResponse(BaseModel):
     user: UserResponse
 
 
+class AdminWorkView(BaseModel):
+    user: UserResponse
+    tickets: list[TicketResponse]
+    templates: list[RecurringTemplateResponse]
+
+
 class NotificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
