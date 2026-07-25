@@ -63,15 +63,15 @@ class TicketResponse(BaseModel):
     created_by: int
     created_at: datetime
     updated_at: datetime
-    assignees: list[UserResponse] = []
+    assignee: Optional[UserResponse] = None
     comment_count: int = 0
 
     @staticmethod
     def from_ticket(ticket) -> "TicketResponse":
         response = TicketResponse.model_validate(ticket)
-        response.assignees = [
-            UserResponse.model_validate(a.user) for a in ticket.assignments
-        ]
+        response.assignee = (
+            UserResponse.model_validate(ticket.assignee) if ticket.assignee else None
+        )
         response.comment_count = len(ticket.comments)
         return response
 

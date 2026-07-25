@@ -24,7 +24,7 @@ const SORT_OPTIONS = [
 // Assigned tickets name their worker directly; personal ones only carry the
 // creator's id, resolved through the users map.
 function ticketWorkerId(t) {
-  return t.assignees.length > 0 ? t.assignees[0].id : t.created_by;
+  return t.assignee ? t.assignee.id : t.created_by;
 }
 
 export default function Archive() {
@@ -68,9 +68,7 @@ export default function Archive() {
   const usersById = Object.fromEntries(users.map((u) => [u.id, u.name]));
   const workers = users.filter((u) => u.role === "worker");
   const workerName = (t) =>
-    t.assignees.length > 0
-      ? t.assignees.map((a) => a.name).join(", ")
-      : usersById[t.created_by] || "";
+    t.assignee ? t.assignee.name : usersById[t.created_by] || "";
 
   const sortedTickets = [...tickets].sort((a, b) => {
     if (sortBy === "worker") {
