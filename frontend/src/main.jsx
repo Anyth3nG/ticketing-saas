@@ -8,6 +8,7 @@ import WorkerDashboard from './pages/WorkerDashboard.jsx'
 import ManagerDashboard from './pages/ManagerDashboard.jsx'
 import ManagerWorkDashboard from './pages/ManagerWorkDashboard.jsx'
 import Archive from './pages/Archive.jsx'
+import AdminYuliaWork from './pages/AdminYuliaWork.jsx'
 import { getCurrentUser } from './api/users.js'
 
 function ProtectedRoute() {
@@ -72,6 +73,7 @@ createRoot(document.getElementById('root')).render(
               <Route path="/manager" element={<ManagerDashboard />} />
               <Route path="/manager/work" element={<ManagerWorkDashboard />} />
               <Route path="/archive" element={<Archive />} />
+              <Route path="/admin/yulia-work" element={<AdminYuliaWork />} />
             </Route>
           </Route>
         </Routes>
