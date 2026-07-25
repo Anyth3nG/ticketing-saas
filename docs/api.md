@@ -123,8 +123,10 @@ still set to the real recurrence day (clamped to the end of the month), so a tem
 day hasn't come up yet still generates a ticket, just with a future due date; this is what
 lets a "this month" view show upcoming recurring work ahead of time. There is no background
 job or scheduler for this — generation happens lazily, inline in the request, the first time a
-relevant user loads their ticket list each month. The function is idempotent (safe to call on
-every request) and commits in a single transaction.
+relevant user loads their ticket list each month. It's safe to call on every request, including
+concurrently — it takes a row lock (`SELECT ... FOR UPDATE`) on the matching templates before
+checking whether this month's ticket already exists, so two overlapping calls for the same user
+can't both pass that check and create a duplicate — and commits in a single transaction.
 
 Query params:
 
@@ -133,14 +135,14 @@ Query params:
 | `include_archived` | boolean | Default `false`. When `false`, tickets with `status = "done"` are excluded. |
 
 - Managers: all tickets (including workers' personal tickets).
-- Workers: tickets they're assigned to (via `ticket_assignments`), plus their own personal
+- Workers: tickets they're assigned to (via `assigned_to`), plus their own personal
   tickets (`ticket_type = "personal"` and `created_by = <them>`).
 
 Response: `200 OK`, `list[TicketResponse]`
 
 #### `GET /api/tickets/{id}`
 
-Get a single ticket with its assignees.
+Get a single ticket with its assignee.
 
 - Managers: any ticket.
 - Workers: assigned to the ticket, or the creator of a personal ticket — otherwise `403`.
@@ -216,7 +218,7 @@ Response: `200 OK`, `list[TicketCommentResponse]`. `404` if the ticket doesn't e
 
 #### `DELETE /api/tickets/{id}`
 
-Delete a ticket, its assignments, its comments, and any notifications pointing at it.
+Delete a ticket, its comments, and any notifications pointing at it.
 
 - Managers: only tickets they handed out (`ticket_type = "assigned"`) — not a worker's personal
   ticket.
@@ -268,7 +270,7 @@ Response: `204 No Content`. `403` if not the owner. `404` if it doesn't exist.
 ### Notifications
 
 In-app notifications for ticket comments. A notification is created for a ticket's creator and
-assignee(s) whenever someone else posts a comment on it (see `POST /api/tickets/{id}/comments`
+assignee whenever someone else posts a comment on it (see `POST /api/tickets/{id}/comments`
 above) — the commenter themselves is never notified of their own comment. Personal tickets have
 no assignee, so for those every manager is notified instead, so either side can pick up the
 thread — this applies whether the personal ticket belongs to a worker or to a manager's own "My

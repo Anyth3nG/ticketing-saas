@@ -1,7 +1,7 @@
 import itertools
 from datetime import date
 
-from models import RecurringTicketTemplate, Ticket, TicketAssignment, User
+from models import RecurringTicketTemplate, Ticket, User
 from services import recurring_tickets as svc
 
 TODAY = date(2026, 7, 15)
@@ -116,11 +116,7 @@ def test_assigned_template_creates_ticket_and_assignment(db, monkeypatch):
     svc.generate_due_recurring_tickets(db, manager)
 
     ticket = db.query(Ticket).filter(Ticket.template_id == template.id).one()
-    assignments = db.query(TicketAssignment).filter(
-        TicketAssignment.ticket_id == ticket.id
-    ).all()
-    assert len(assignments) == 1
-    assert assignments[0].user_id == worker.id
+    assert ticket.assigned_to == worker.id
 
 
 def test_personal_template_creates_ticket_without_assignment(db, monkeypatch):
@@ -135,8 +131,4 @@ def test_personal_template_creates_ticket_without_assignment(db, monkeypatch):
     ticket = db.query(Ticket).filter(Ticket.template_id == template.id).one()
     assert ticket.status == "personal_work"
     assert ticket.created_by == worker.id
-
-    assignments = db.query(TicketAssignment).filter(
-        TicketAssignment.ticket_id == ticket.id
-    ).all()
-    assert len(assignments) == 0
+    assert ticket.assigned_to is None

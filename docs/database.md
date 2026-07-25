@@ -65,6 +65,7 @@ Tasks and work items.
 | `urgency` | String | Not null — one of `low`, `medium`, `high` |
 | `due_date` | Date | Not null |
 | `created_by` | Integer | Foreign key to `users.id`, not null |
+| `assigned_to` | Integer | Foreign key to `users.id`, nullable — null for personal tickets |
 | `is_recurring` | Boolean | Not null, defaults to `false` |
 | `recurrence_day` | Integer | Nullable — day of month (1-31) |
 | `template_id` | Integer | Foreign key to `recurring_ticket_templates.id`, nullable |
@@ -73,26 +74,16 @@ Tasks and work items.
 
 Relationships:
 - `creator` — the `User` who created the ticket (via `created_by`)
-- `assignments` — related `TicketAssignment` rows
+- `assignee` — the `User` the ticket is assigned to (via `assigned_to`), if any
 - `comments` — related `TicketComment` rows
 - `template` — the `RecurringTicketTemplate` this ticket was generated from (via `template_id`)
 
 > Note: tickets previously created with `status = open` were migrated to `status = to_do`.
 
-### `ticket_assignments`
-
-Join table linking tickets to the users assigned to them.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | Integer | Primary key |
-| `ticket_id` | Integer | Foreign key to `tickets.id`, not null |
-| `user_id` | Integer | Foreign key to `users.id`, not null |
-| `assigned_at` | DateTime | Not null, defaults to `utcnow` |
-
-Relationships:
-- `ticket` — the assigned `Ticket`
-- `user` — the assigned `User`
+> Note: assignment used to go through a separate `ticket_assignments` join table. It was
+> removed in favor of `assigned_to` directly on `tickets` — the app only ever kept one
+> assignee alive per ticket (reassignment deleted the old row and inserted a new one), so the
+> join table's many-to-many capability was never actually used.
 
 ### `ticket_comments`
 
@@ -128,7 +119,7 @@ Relationships:
 - `ticket` — the `Ticket` the comment was posted on
 - `comment` — the `TicketComment` that triggered the notification
 
-Created for the ticket's creator and assignee(s), excluding whoever posted the comment
+Created for the ticket's creator and assignee, excluding whoever posted the comment
 (`_comment_recipients` in `routes/tickets.py`). Personal tickets have no assignee, so for those
 every manager is a recipient instead — this applies equally whether the personal ticket
 belongs to a worker or to a manager's own "My Work" board. `GET /api/notifications` only

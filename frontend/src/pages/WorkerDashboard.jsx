@@ -234,32 +234,45 @@ export default function WorkerDashboard() {
     setSearchParams(searchParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const load = useCallback(async () => {
-    setStatus("loading");
-    try {
-      const token = await getToken();
-      const [currentUser, ticketList, templateList] = await Promise.all([
-        getCurrentUser(token),
-        getTickets(token),
-        getRecurringTemplates(token),
-      ]);
-      if (currentUser.role !== "worker") {
-        navigate("/manager", { replace: true });
-        return;
+  const load = useCallback(
+    async (isCancelled = () => false) => {
+      setStatus("loading");
+      try {
+        const token = await getToken();
+        const [currentUser, ticketList, templateList] = await Promise.all([
+          getCurrentUser(token),
+          getTickets(token),
+          getRecurringTemplates(token),
+        ]);
+        if (isCancelled()) return;
+        if (currentUser.role !== "worker") {
+          navigate("/manager", { replace: true });
+          return;
+        }
+        setUser(currentUser);
+        setTickets(ticketList);
+        setTemplates(templateList);
+        setStatus("ready");
+      } catch {
+        if (!isCancelled()) setStatus("error");
       }
-      setUser(currentUser);
-      setTickets(ticketList);
-      setTemplates(templateList);
-      setStatus("ready");
-    } catch {
-      setStatus("error");
-    }
-  }, [getToken, navigate]);
+    },
+    [getToken, navigate]
+  );
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
+    // A stale poll response (this effect instance's cleanup already ran, or a
+    // later poll already landed) must not overwrite newer state -- isCancelled
+    // is checked after the async fetch resolves, same pattern as RoleRedirect
+    // in main.jsx.
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+    load(isCancelled);
+    const interval = setInterval(() => load(isCancelled), 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [load]);
 
   const sensors = useSensors(
