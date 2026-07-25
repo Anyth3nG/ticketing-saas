@@ -236,7 +236,7 @@ export default function TicketDetailModal({
                   <label className="reassign-control">
                     Assigned to
                     <select
-                      value={ticket.assignees[0]?.id ?? ""}
+                      value={ticket.assignee?.id ?? ""}
                       onChange={handleReassign}
                     >
                       {workers.map((w) => (
@@ -247,9 +247,7 @@ export default function TicketDetailModal({
                     </select>
                   </label>
                 ) : (
-                  ticket.assignees.length > 0 && (
-                    <p>Assigned to: {ticket.assignees.map((a) => a.name).join(", ")}</p>
-                  )
+                  ticket.assignee && <p>Assigned to: {ticket.assignee.name}</p>
                 )}
               </div>
             )}

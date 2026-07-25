@@ -1,6 +1,6 @@
 from conftest import make_ticket, make_user
 
-from models import Notification, Ticket, TicketAssignment, TicketComment
+from models import Notification, Ticket, TicketComment
 
 
 def test_manager_can_delete_assigned_ticket(app_client):
@@ -14,12 +14,6 @@ def test_manager_can_delete_assigned_ticket(app_client):
 
     assert resp.status_code == 204
     assert db.query(Ticket).filter(Ticket.id == ticket.id).first() is None
-    assert (
-        db.query(TicketAssignment)
-        .filter(TicketAssignment.ticket_id == ticket.id)
-        .count()
-        == 0
-    )
 
 
 def test_delete_also_clears_comments_and_notifications(app_client):

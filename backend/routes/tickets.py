@@ -8,7 +8,6 @@ from models import (
     Notification,
     RecurringTicketTemplate,
     Ticket,
-    TicketAssignment,
     TicketComment,
     User,
 )
@@ -30,7 +29,7 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 
 def _is_assigned(ticket: Ticket, user_id: int) -> bool:
-    return any(a.user_id == user_id for a in ticket.assignments)
+    return ticket.assigned_to == user_id
 
 
 def _can_view_ticket(ticket: Ticket, user: User) -> bool:
@@ -87,7 +86,9 @@ def _can_delete_ticket(ticket: Ticket, user: User) -> bool:
 
 
 def _comment_recipients(ticket: Ticket, author_id: int, db: Session) -> set[int]:
-    recipients = {ticket.created_by, *(a.user_id for a in ticket.assignments)}
+    recipients = {ticket.created_by}
+    if ticket.assigned_to:
+        recipients.add(ticket.assigned_to)
     if ticket.ticket_type == "personal":
         # Personal work has no assignee, so loop every manager in so either
         # side can follow the thread and reply.
@@ -114,11 +115,9 @@ def create_ticket(
         urgency=payload.urgency,
         due_date=payload.due_date,
         created_by=current_user.id,
+        assigned_to=assignee.id,
     )
     db.add(ticket)
-    db.flush()
-
-    db.add(TicketAssignment(ticket_id=ticket.id, user_id=assignee.id))
     db.commit()
     db.refresh(ticket)
 
@@ -198,18 +197,14 @@ def list_tickets(
 
     query = db.query(Ticket)
     if current_user.role != "manager":
-        query = (
-            query.outerjoin(TicketAssignment)
-            .filter(
-                or_(
-                    TicketAssignment.user_id == current_user.id,
-                    and_(
-                        Ticket.ticket_type == "personal",
-                        Ticket.created_by == current_user.id,
-                    ),
-                )
+        query = query.filter(
+            or_(
+                Ticket.assigned_to == current_user.id,
+                and_(
+                    Ticket.ticket_type == "personal",
+                    Ticket.created_by == current_user.id,
+                ),
             )
-            .distinct()
         )
 
     if not include_archived:
@@ -374,8 +369,7 @@ def assign_ticket(
     if assignee is None:
         raise HTTPException(status_code=400, detail="user_id not found")
 
-    db.query(TicketAssignment).filter(TicketAssignment.ticket_id == ticket_id).delete()
-    db.add(TicketAssignment(ticket_id=ticket.id, user_id=assignee.id))
+    ticket.assigned_to = assignee.id
     db.commit()
     db.refresh(ticket)
     return TicketResponse.from_ticket(ticket)
@@ -455,6 +449,5 @@ def delete_ticket(
     # notification also references a comment, so it must be cleared first.
     db.query(Notification).filter(Notification.ticket_id == ticket_id).delete()
     db.query(TicketComment).filter(TicketComment.ticket_id == ticket_id).delete()
-    db.query(TicketAssignment).filter(TicketAssignment.ticket_id == ticket_id).delete()
     db.delete(ticket)
     db.commit()
