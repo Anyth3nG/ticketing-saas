@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database import Base, get_db
-from models import Ticket, TicketAssignment, User
+from models import Ticket, User
 
 _user_seq = itertools.count()
 
@@ -43,11 +43,9 @@ def make_ticket(
         urgency="medium",
         due_date=date(2026, 7, 15),
         created_by=creator.id,
+        assigned_to=assignee.id if assignee is not None else None,
     )
     db.add(ticket)
-    db.flush()
-    if assignee is not None:
-        db.add(TicketAssignment(ticket_id=ticket.id, user_id=assignee.id))
     db.commit()
     db.refresh(ticket)
     return ticket

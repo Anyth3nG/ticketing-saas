@@ -191,45 +191,64 @@ export default function ManagerDashboard() {
     });
   };
 
-  const load = useCallback(async () => {
-    setStatus("loading");
-    try {
-      const token = await getToken();
-      const [currentUser, ticketList, userList] = await Promise.all([
-        getCurrentUser(token),
-        getTickets(token),
-        getUsers(token),
-      ]);
-      if (currentUser.role !== "manager") {
-        navigate("/worker", { replace: true });
-        return;
+  const load = useCallback(
+    async (isCancelled = () => false) => {
+      setStatus("loading");
+      try {
+        const token = await getToken();
+        const [currentUser, ticketList, userList] = await Promise.all([
+          getCurrentUser(token),
+          getTickets(token),
+          getUsers(token),
+        ]);
+        if (isCancelled()) return;
+        if (currentUser.role !== "manager") {
+          navigate("/worker", { replace: true });
+          return;
+        }
+        setUser(currentUser);
+        // GET /tickets/ returns everything to a manager, including every
+        // manager's own personal work (the "My Work" page) -- exclude all of
+        // it here, not just the viewer's own, so it never inflates the
+        // oversight stat tiles for other managers. It can never render in a
+        // worker box either way (worker boxes only match a worker.id), so
+        // without this a manager's personal backlog was counted for everyone
+        // but visible to no one.
+        const managerIds = new Set(
+          userList.filter((u) => u.role === "manager").map((u) => u.id)
+        );
+        setTickets(
+          ticketList.filter(
+            (t) => !(t.ticket_type === "personal" && managerIds.has(t.created_by))
+          )
+        );
+        setWorkers(
+          applyDashboardOrder(
+            userList.filter((u) => u.role === "worker"),
+            currentUser.dashboard_layout
+          )
+        );
+        setStatus("ready");
+      } catch {
+        if (!isCancelled()) setStatus("error");
       }
-      setUser(currentUser);
-      // GET /tickets/ returns everything to a manager, including their own
-      // personal work (the "My Work" page) -- exclude it here so it never
-      // inflates the oversight stat tiles (worker boxes already exclude it
-      // naturally, since its created_by never matches a worker.id).
-      setTickets(
-        ticketList.filter(
-          (t) => !(t.ticket_type === "personal" && t.created_by === currentUser.id)
-        )
-      );
-      setWorkers(
-        applyDashboardOrder(
-          userList.filter((u) => u.role === "worker"),
-          currentUser.dashboard_layout
-        )
-      );
-      setStatus("ready");
-    } catch {
-      setStatus("error");
-    }
-  }, [getToken, navigate]);
+    },
+    [getToken, navigate]
+  );
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
+    // A stale poll response (this effect instance's cleanup already ran, or a
+    // later poll already landed) must not overwrite newer state -- isCancelled
+    // is checked after the async fetch resolves, same pattern as RoleRedirect
+    // in main.jsx.
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+    load(isCancelled);
+    const interval = setInterval(() => load(isCancelled), 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [load]);
 
   const handleQuickApprove = async (ticketId) => {
@@ -321,7 +340,7 @@ export default function ManagerDashboard() {
         {workers.map((worker) => {
           const workerTickets = tickets.filter(
             (t) =>
-              t.assignees.some((a) => a.id === worker.id) ||
+              t.assignee?.id === worker.id ||
               (t.ticket_type === "personal" && t.created_by === worker.id)
           );
           const activeFilter = statusFilters[worker.id] || ALL_STATUSES_VISIBLE;

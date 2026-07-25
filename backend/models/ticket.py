@@ -17,6 +17,7 @@ class Ticket(Base):
     urgency = Column(String, nullable=False)
     due_date = Column(Date, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
     is_recurring = Column(Boolean, nullable=False, default=False)
     recurrence_day = Column(Integer, nullable=True)
     template_id = Column(
@@ -27,7 +28,7 @@ class Ticket(Base):
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    creator = relationship("User", backref="tickets_created")
-    assignments = relationship("TicketAssignment", back_populates="ticket")
+    creator = relationship("User", foreign_keys=[created_by], backref="tickets_created")
+    assignee = relationship("User", foreign_keys=[assigned_to], backref="assigned_tickets")
     comments = relationship("TicketComment", back_populates="ticket")
     template = relationship("RecurringTicketTemplate", back_populates="generated_tickets")

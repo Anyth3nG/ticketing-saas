@@ -4,7 +4,7 @@ from datetime import date, datetime
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
-from models import RecurringTicketTemplate, Ticket, TicketAssignment, User
+from models import RecurringTicketTemplate, Ticket, User
 
 
 def _clamped_due_date(today: date, recurrence_day: int) -> date:
@@ -38,7 +38,11 @@ def generate_due_recurring_tickets(db: Session, user: User) -> None:
         else datetime(today.year, today.month + 1, 1)
     )
 
-    for template in query.all():
+    # with_for_update() locks each matching template row for the rest of this
+    # transaction, so a second concurrent call for the same user (e.g. two
+    # overlapping GET /tickets/ requests) blocks here instead of racing past
+    # the already_generated check below and creating a duplicate ticket.
+    for template in query.with_for_update().all():
         due_date = _clamped_due_date(today, template.recurrence_day)
 
         # Materialize the ticket for the whole current month as soon as it's
@@ -67,15 +71,10 @@ def generate_due_recurring_tickets(db: Session, user: User) -> None:
             status="to_do" if template.ticket_type == "assigned" else "personal_work",
             due_date=due_date,
             created_by=template.created_by,
+            assigned_to=template.assigned_to if template.ticket_type == "assigned" else None,
             template_id=template.id,
             is_recurring=True,
         )
         db.add(ticket)
-        db.flush()
-
-        if template.ticket_type == "assigned":
-            db.add(
-                TicketAssignment(ticket_id=ticket.id, user_id=template.assigned_to)
-            )
 
     db.commit()
