@@ -6,7 +6,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../api/notifications";
-import { BellIcon } from "./icons";
+import { BellIcon, CommentIcon, NewTicketIcon } from "./icons";
 import { formatDateTime } from "../utils/date";
 
 export default function NotificationBell({ role }) {
@@ -45,6 +45,16 @@ export default function NotificationBell({ role }) {
   }, [open]);
 
   const unreadCount = notifications.length;
+
+  const baseTitleRef = useRef(document.title);
+
+  useEffect(() => {
+    document.title =
+      unreadCount > 0 ? `(${unreadCount}) ${baseTitleRef.current}` : baseTitleRef.current;
+    return () => {
+      document.title = baseTitleRef.current;
+    };
+  }, [unreadCount]);
 
   async function handleSelect(notification) {
     setOpen(false);
@@ -105,10 +115,13 @@ export default function NotificationBell({ role }) {
               onClick={() => handleSelect(n)}
             >
               <span className="notification-item-title">
+                {n.type === "ticket_assigned" ? <NewTicketIcon /> : <CommentIcon />}
                 <span className="ticket-number">#{n.ticket_id}</span> {n.ticket_title}
               </span>
               <span className="notification-item-preview">
-                {n.comment.user.name}: {n.comment.content}
+                {n.type === "ticket_assigned"
+                  ? "New ticket assigned to you"
+                  : `${n.comment.user.name}: ${n.comment.content}`}
               </span>
               <span className="notification-item-time">{formatDateTime(n.created_at)}</span>
             </button>

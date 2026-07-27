@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth, useUser, UserButton } from "@clerk/react";
 import { Link, useLocation } from "react-router-dom";
-import { getCurrentUser } from "../api/users";
+import { getCurrentUser, getUsers } from "../api/users";
+import { applyDashboardOrder } from "../utils/format";
 import NotificationBell from "./NotificationBell";
+import DashboardLayoutEditor from "./DashboardLayoutEditor";
+import { GridIcon } from "./icons";
 
 const DASHBOARD_PATHS = ["/", "/worker", "/manager"];
 
@@ -16,6 +20,9 @@ export default function Navbar() {
   const { pathname } = useLocation();
   const [role, setRole] = useState(null);
   const [email, setEmail] = useState(null);
+  const [dashboardLayout, setDashboardLayout] = useState(null);
+  const [layoutWorkers, setLayoutWorkers] = useState([]);
+  const [showLayoutEditor, setShowLayoutEditor] = useState(false);
   const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
   const isDashboard = DASHBOARD_PATHS.includes(pathname);
   const isArchive = pathname === "/archive";
@@ -30,6 +37,7 @@ export default function Navbar() {
       if (!cancelled) {
         setRole(currentUser.role);
         setEmail(currentUser.email);
+        setDashboardLayout(currentUser.dashboard_layout);
       }
     }
     loadRole();
@@ -37,6 +45,23 @@ export default function Navbar() {
       cancelled = true;
     };
   }, [getToken]);
+
+  async function openLayoutEditor() {
+    const token = await getToken();
+    const userList = await getUsers(token);
+    setLayoutWorkers(
+      applyDashboardOrder(
+        userList.filter((u) => u.role === "worker"),
+        dashboardLayout
+      )
+    );
+    setShowLayoutEditor(true);
+  }
+
+  function handleLayoutSaved(newOrder) {
+    setDashboardLayout(newOrder);
+    setShowLayoutEditor(false);
+  }
 
   return (
     <nav className="navbar">
@@ -73,8 +98,34 @@ export default function Navbar() {
         </Link>
       )}
       <span className="navbar-user">{name}</span>
+      {role === "manager" && (
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={openLayoutEditor}
+          aria-label="Change dashboard layout"
+          title="Change dashboard layout"
+        >
+          <GridIcon />
+        </button>
+      )}
       <NotificationBell role={role} />
       <UserButton />
+
+      {showLayoutEditor &&
+        createPortal(
+          // Portalled to <body> rather than rendered in place: .navbar has
+          // backdrop-filter, which (like transform) creates a new containing
+          // block for position:fixed descendants -- left in place, the
+          // modal's fixed overlay would center on the navbar instead of the
+          // viewport.
+          <DashboardLayoutEditor
+            workers={layoutWorkers}
+            onClose={() => setShowLayoutEditor(false)}
+            onSaved={handleLayoutSaved}
+          />,
+          document.body
+        )}
     </nav>
   );
 }
