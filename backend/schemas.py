@@ -63,6 +63,7 @@ class TicketResponse(BaseModel):
     created_by: int
     created_at: datetime
     updated_at: datetime
+    completed_at: Optional[datetime] = None
     assignee: Optional[UserResponse] = None
     comment_count: int = 0
 
@@ -129,15 +130,19 @@ class AdminWorkView(BaseModel):
     templates: list[RecurringTemplateResponse]
 
 
+NotificationType = Literal["comment", "ticket_assigned"]
+
+
 class NotificationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     ticket_id: int
+    type: NotificationType
     is_read: bool
     created_at: datetime
     ticket_title: str = ""
-    comment: TicketCommentResponse
+    comment: Optional[TicketCommentResponse] = None
 
     @staticmethod
     def from_notification(notification) -> "NotificationResponse":

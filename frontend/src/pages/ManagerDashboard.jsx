@@ -4,11 +4,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { createTicket, getTickets, updateTicketStatus } from "../api/tickets";
 import { getCurrentUser, getUsers } from "../api/users";
 import TicketDetailModal from "../components/TicketDetailModal";
-import DashboardLayoutEditor from "../components/DashboardLayoutEditor";
 import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
 import { AlertIcon, CheckIcon } from "../components/icons";
 import { formatDate, todayISO } from "../utils/date";
-import { initials } from "../utils/format";
+import { applyDashboardOrder, initials } from "../utils/format";
 
 const LEGEND_STATUSES = ["to_do", "personal_work", "working_on", "awaiting_approval"];
 const URGENCY_OPTIONS = ["low", "medium", "high"];
@@ -17,19 +16,6 @@ const ALL_STATUSES_VISIBLE = LEGEND_STATUSES.reduce(
   (acc, s) => ({ ...acc, [s]: true }),
   {}
 );
-
-// A manager's saved dashboard_layout is a list of worker ids in display
-// order. Workers not in it (new hires, or no layout saved yet) sort after
-// the ones that are, in a stable id order.
-function applyDashboardOrder(workerList, layout) {
-  if (!layout || layout.length === 0) return workerList;
-  const rank = new Map(layout.map((id, i) => [id, i]));
-  return [...workerList].sort((a, b) => {
-    const ra = rank.has(a.id) ? rank.get(a.id) : Infinity;
-    const rb = rank.has(b.id) ? rank.get(b.id) : Infinity;
-    return ra !== rb ? ra - rb : a.id - b.id;
-  });
-}
 
 function CreateTicketForm({ workers, onClose, onCreated }) {
   const { getToken } = useAuth();
@@ -139,7 +125,6 @@ export default function ManagerDashboard() {
   const [openTicketId, setOpenTicketId] = useState(null);
   const [statusFilters, setStatusFilters] = useState({});
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showLayoutEditor, setShowLayoutEditor] = useState(false);
 
   useEffect(() => {
     const ticketParam = searchParams.get("ticket");
@@ -261,12 +246,6 @@ export default function ManagerDashboard() {
     }
   };
 
-  const handleLayoutSaved = (newOrder) => {
-    setUser((prev) => ({ ...prev, dashboard_layout: newOrder }));
-    setWorkers((prev) => applyDashboardOrder(prev, newOrder));
-    setShowLayoutEditor(false);
-  };
-
   if (!user && status === "loading") return <p className="state-message">Loading dashboard…</p>;
   if (!user && status === "error") return <p className="state-message">Failed to load dashboard.</p>;
 
@@ -279,9 +258,6 @@ export default function ManagerDashboard() {
       <div className="page-header">
         <h1>Team Board</h1>
         <div className="page-header-actions">
-          <button type="button" className="btn-soft" onClick={() => setShowLayoutEditor(true)}>
-            Change Layout
-          </button>
           <button type="button" className="btn" onClick={() => setShowCreateForm(true)}>
             Create Ticket
           </button>
@@ -441,14 +417,6 @@ export default function ManagerDashboard() {
           workers={workers}
           onClose={() => setShowCreateForm(false)}
           onCreated={load}
-        />
-      )}
-
-      {showLayoutEditor && (
-        <DashboardLayoutEditor
-          workers={workers}
-          onClose={() => setShowLayoutEditor(false)}
-          onSaved={handleLayoutSaved}
         />
       )}
     </div>

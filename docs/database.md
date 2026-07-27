@@ -71,12 +71,17 @@ Tasks and work items.
 | `template_id` | Integer | Foreign key to `recurring_ticket_templates.id`, nullable |
 | `created_at` | DateTime | Not null, defaults to `utcnow` |
 | `updated_at` | DateTime | Not null, defaults to `utcnow`, updates on every save |
+| `completed_at` | DateTime | Nullable — set only by `PATCH /tickets/{id}/status` when `status` transitions to `done`, cleared if it's ever moved off `done`. Unlike `updated_at`, an unrelated field edit can't bump it, so it's the reliable "when was this actually completed" value (used by Archive) |
 
 Relationships:
 - `creator` — the `User` who created the ticket (via `created_by`)
 - `assignee` — the `User` the ticket is assigned to (via `assigned_to`), if any
 - `comments` — related `TicketComment` rows
 - `template` — the `RecurringTicketTemplate` this ticket was generated from (via `template_id`)
+
+> Note: tickets marked `done` before `completed_at` existed were backfilled from their
+> `updated_at` value (the closest available approximation, and what Archive already displayed
+> as the completion time before this column was added).
 
 > Note: tickets previously created with `status = open` were migrated to `status = to_do`.
 
@@ -103,27 +108,38 @@ Relationships:
 
 ### `notifications`
 
-In-app notifications, created when a comment is posted on a ticket.
+In-app notifications. Two kinds, distinguished by `type`: a comment reply on a ticket, or a
+ticket being (re)assigned to you.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | Integer | Primary key |
 | `user_id` | Integer | Foreign key to `users.id`, not null — the recipient |
 | `ticket_id` | Integer | Foreign key to `tickets.id`, not null |
-| `comment_id` | Integer | Foreign key to `ticket_comments.id`, not null — the comment that triggered it |
+| `comment_id` | Integer | Foreign key to `ticket_comments.id`, nullable — the comment that triggered it; null for a `ticket_assigned` notification, which isn't tied to any comment |
+| `type` | String | Not null, defaults to `comment` — `comment` or `ticket_assigned` |
 | `is_read` | Boolean | Not null, defaults to `false` |
 | `created_at` | DateTime | Not null, defaults to `utcnow` |
 
 Relationships:
 - `user` — the recipient `User`
-- `ticket` — the `Ticket` the comment was posted on
-- `comment` — the `TicketComment` that triggered the notification
+- `ticket` — the `Ticket` the notification is about
+- `comment` — the `TicketComment` that triggered it, for `type = "comment"` only
 
-Created for the ticket's creator and assignee, excluding whoever posted the comment
-(`_comment_recipients` in `routes/tickets.py`). Personal tickets have no assignee, so for those
-every manager is a recipient instead — this applies equally whether the personal ticket
-belongs to a worker or to a manager's own "My Work" board. `GET /api/notifications` only
-returns unread rows — once read, a notification no longer appears there. See [api.md](api.md).
+`type = "comment"` is created for the ticket's creator and assignee, excluding whoever posted
+the comment (`_comment_recipients` in `routes/tickets.py`). Personal tickets have no assignee,
+so for those every manager is a recipient instead — this applies equally whether the personal
+ticket belongs to a worker or to a manager's own "My Work" board.
+
+`type = "ticket_assigned"` is created for the assignee whenever a ticket is created
+(`POST /api/tickets`) or reassigned (`POST /api/tickets/{id}/assignments`) — not for the
+manager who did the assigning, and not for personal tickets (which have no assignee).
+
+`GET /api/notifications` only returns unread rows — once read, a notification no longer
+appears there. See [api.md](api.md).
+
+> Note: every notification created before `type` existed was a comment reply, so the migration
+> that added the column backfilled all of them to `type = "comment"`.
 
 ### `recurring_ticket_templates`
 

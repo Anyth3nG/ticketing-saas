@@ -5,7 +5,7 @@ import { getYuliaTicketComments, getYuliaWork } from "../api/admin";
 import TicketCard from "../components/TicketCard";
 import RecurringTemplateCard from "../components/RecurringTemplateCard";
 import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
-import { formatDate, formatDateTime, formatTimestampDate } from "../utils/date";
+import { formatDate, formatDateTime } from "../utils/date";
 
 // Read-only mirror of ManagerWorkDashboard.jsx ("My Work"), scoped server-side
 // to one specific report (see backend/routes/admin.py) and gated to one
@@ -32,8 +32,10 @@ function todayLocal() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+// Overdue tickets stay under "Today" rather than falling off the board once
+// their due date passes -- they're still due, just later than planned.
 function isToday(dateStr) {
-  return parseISODate(dateStr).getTime() === todayLocal().getTime();
+  return parseISODate(dateStr).getTime() <= todayLocal().getTime();
 }
 
 function startOfWeek(date) {
@@ -102,7 +104,7 @@ function ReadOnlyTicketModal({ ticket, onClose }) {
           <p>{ticket.description || "No description."}</p>
           <p>Urgency: {ticket.urgency}</p>
           <p>Due: {formatDate(ticket.due_date)}</p>
-          <p>Created: {formatTimestampDate(ticket.created_at)}</p>
+          <p>Created: {formatDateTime(ticket.created_at)}</p>
         </div>
 
         <div className="status-changer">

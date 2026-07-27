@@ -48,8 +48,10 @@ function todayLocal() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
+// Overdue tickets stay under "Today" rather than falling off the board once
+// their due date passes -- they're still due, just later than planned.
 function isToday(dateStr) {
-  return parseISODate(dateStr).getTime() === todayLocal().getTime();
+  return parseISODate(dateStr).getTime() <= todayLocal().getTime();
 }
 
 function startOfWeek(date) {

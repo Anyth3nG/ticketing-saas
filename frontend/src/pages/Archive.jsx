@@ -4,7 +4,7 @@ import { getTickets } from "../api/tickets";
 import { getCurrentUser, getUsers } from "../api/users";
 import TicketDetailModal from "../components/TicketDetailModal";
 import StatusDot, { STATUS_COLORS } from "../components/StatusDot";
-import { formatDate, formatTimestampDate } from "../utils/date";
+import { formatDate, formatDateTime } from "../utils/date";
 
 // Every archived ticket is "done", so its grey dot carries no information.
 // Recolour it by type instead, so the circle itself says whether this was a
@@ -79,7 +79,7 @@ export default function Archive() {
       if (cmp) return cmp;
     }
     // Default order, and tiebreak for the others: most recently completed first.
-    return b.updated_at.localeCompare(a.updated_at);
+    return b.completed_at.localeCompare(a.completed_at);
   });
 
   // Worker and color modes each narrow the list to a chosen value.
@@ -168,7 +168,7 @@ export default function Archive() {
             )}
             <span className="archive-meta">
               Due {formatDate(ticket.due_date)} · completed{" "}
-              {formatTimestampDate(ticket.updated_at)}
+              {formatDateTime(ticket.completed_at)}
             </span>
           </li>
         ))}

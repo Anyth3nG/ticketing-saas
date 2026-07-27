@@ -19,18 +19,18 @@ export function formatDate(isoDate) {
 
 // For full ISO datetimes (e.g. comment created_at) -- converts to the
 // browser's local time zone, same as the toLocaleString() it replaces.
+// hour12 is forced off rather than left to the browser's locale default, so
+// the displayed time is always hh:mm (24h) regardless of the viewer's system
+// locale.
 export function formatDateTime(isoDateTime) {
   if (!isoDateTime) return "";
   const d = new Date(isoDateTime);
-  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const time = d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
   return `${toDdMmYyyy(d)}, ${time}`;
-}
-
-// Date-only display for a full ISO datetime (e.g. ticket updated_at) --
-// same local-time conversion as formatDateTime, just without the time part.
-export function formatTimestampDate(isoDateTime) {
-  if (!isoDateTime) return "";
-  return toDdMmYyyy(new Date(isoDateTime));
 }
 
 // Today as "YYYY-MM-DD", for pre-filling <input type="date"> defaults.
