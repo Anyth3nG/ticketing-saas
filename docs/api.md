@@ -78,7 +78,8 @@ Request body (`TicketCreate`):
 | `due_date` | date (`YYYY-MM-DD`) | Required |
 | `assigned_to` | int | `user_id` of the assignee; must exist |
 
-`status` is always set to `to_do` on creation.
+`status` is always set to `to_do` on creation. Creates a `type = "ticket_assigned"` notification
+for the assignee (see [database.md](database.md)).
 
 Response: `201 Created`, `TicketResponse`. `400` if `assigned_to` does not reference an existing user.
 
@@ -189,12 +190,17 @@ Request body (`TicketStatusUpdate`): `{ "status": "..." }`, one of `to_do`, `per
 - Workers, on tickets they're assigned to: free movement between any of the 5 statuses, same as
   above.
 
+A transition into `done` sets `completed_at` to the current time; a transition off `done` (only
+reachable via the free-movement case above, since nothing else allows leaving `done`) clears it
+back to `null`. See [database.md](database.md).
+
 Response: `200 OK`, `TicketResponse`. `403` if not authorized on the ticket. `404` if the ticket doesn't exist.
 
 #### `POST /api/tickets/{id}/assignments`
 
 Assign or reassign a ticket to a worker. **Managers only**. Replaces any existing assignment
-(single-assignee model) — does not add a second assignee.
+(single-assignee model) — does not add a second assignee. Creates a `type = "ticket_assigned"`
+notification for the new assignee, same as ticket creation above.
 
 Request body (`AssignmentCreate`): `{ "user_id": <int> }`.
 
@@ -269,20 +275,25 @@ Response: `204 No Content`. `403` if not the owner. `404` if it doesn't exist.
 
 ### Notifications
 
-In-app notifications for ticket comments. A notification is created for a ticket's creator and
-assignee whenever someone else posts a comment on it (see `POST /api/tickets/{id}/comments`
-above) — the commenter themselves is never notified of their own comment. Personal tickets have
-no assignee, so for those every manager is notified instead, so either side can pick up the
-thread — this applies whether the personal ticket belongs to a worker or to a manager's own "My
-Work" board.
+In-app notifications, one of two `type`s:
+
+- `comment` — someone else posted a comment on a ticket you're on. Created for the ticket's
+  creator and assignee (see `POST /api/tickets/{id}/comments` above) — the commenter themselves
+  is never notified of their own comment. Personal tickets have no assignee, so for those every
+  manager is notified instead, so either side can pick up the thread — this applies whether the
+  personal ticket belongs to a worker or to a manager's own "My Work" board.
+- `ticket_assigned` — a ticket was created or reassigned to you (see `POST /api/tickets` and
+  `POST /api/tickets/{id}/assignments` above). Not created for the manager doing the assigning,
+  and never created for personal tickets (no assignee).
 
 #### `GET /api/notifications`
 
 List the current user's **unread** notifications, most recent first. Read notifications are not
 returned — there's no separate "history" endpoint.
 
-Response: `200 OK`, `list[NotificationResponse]` (`id`, `ticket_id`, `ticket_title`, `is_read`,
-`created_at`, nested `comment` — a `TicketCommentResponse`). Capped at 50.
+Response: `200 OK`, `list[NotificationResponse]` (`id`, `ticket_id`, `type`, `ticket_title`,
+`is_read`, `created_at`, nested `comment` — a `TicketCommentResponse`, present only when
+`type = "comment"`, otherwise `null`). Capped at 50.
 
 #### `POST /api/notifications/{id}/read`
 
@@ -297,6 +308,32 @@ current user.
 Mark all of the current user's unread notifications read.
 
 Response: `204 No Content`.
+
+### Admin
+
+A single hardcoded, personal exception rather than a general "view any user as admin" feature —
+see `backend/routes/admin.py`. Lets one specific account (`daniel2233x@gmail.com`, by email, not
+role) view another specific account's (`yulia@max-cpa.co.il`) "My Work" board read-only. Both
+emails are hardcoded constants in the route file, not configuration. See
+[decisions.md](decisions.md) for why.
+
+#### `GET /api/admin/yulia-work`
+
+Get the target user's personal-work board: same scope as their own "My Work" page (personal,
+not-yet-`done` tickets, plus active recurring templates). Also triggers
+`generate_due_recurring_tickets` for the target, same as their own board would.
+
+Response: `200 OK`, `AdminWorkView` (`user` — `UserResponse`, `tickets` — `list[TicketResponse]`,
+`templates` — `list[RecurringTemplateResponse]`). `403` if the caller isn't the one hardcoded
+account. `404` if the target account doesn't exist in this environment (expected outside prod).
+
+#### `GET /api/admin/yulia-work/tickets/{id}/comments`
+
+List comments on one of the target's personal tickets. Re-verifies on every call that `id`
+belongs to the target's own personal work — not just any ticket id — before returning anything.
+
+Response: `200 OK`, `list[TicketCommentResponse]`. `403`/`404` as above; `404` also if `id`
+isn't one of the target's personal tickets.
 
 ### Health
 

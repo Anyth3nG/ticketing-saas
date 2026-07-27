@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
@@ -85,6 +87,19 @@ def _can_delete_ticket(ticket: Ticket, user: User) -> bool:
     return user.role == "manager"
 
 
+def _notify_ticket_assigned(db: Session, ticket: Ticket, actor_id: int) -> None:
+    if ticket.assigned_to is None or ticket.assigned_to == actor_id:
+        return
+    db.add(
+        Notification(
+            user_id=ticket.assigned_to,
+            ticket_id=ticket.id,
+            type="ticket_assigned",
+        )
+    )
+    db.commit()
+
+
 def _comment_recipients(ticket: Ticket, author_id: int, db: Session) -> set[int]:
     recipients = {ticket.created_by}
     if ticket.assigned_to:
@@ -120,6 +135,7 @@ def create_ticket(
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
+    _notify_ticket_assigned(db, ticket, current_user.id)
 
     return TicketResponse.from_ticket(ticket)
 
@@ -350,6 +366,15 @@ def update_ticket_status(
     if not _can_update_status(ticket, current_user, payload.status):
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    # Nothing currently exposes moving a ticket back off "done", but the
+    # permission checks above don't rule it out (e.g. a personal ticket's
+    # owner) -- clear a stale completed_at if that ever happens, rather than
+    # showing a "completed" time on a ticket that no longer is.
+    if payload.status == "done" and ticket.status != "done":
+        ticket.completed_at = datetime.utcnow()
+    elif payload.status != "done" and ticket.status == "done":
+        ticket.completed_at = None
+
     ticket.status = payload.status
     db.commit()
     db.refresh(ticket)
@@ -372,6 +397,7 @@ def assign_ticket(
     ticket.assigned_to = assignee.id
     db.commit()
     db.refresh(ticket)
+    _notify_ticket_assigned(db, ticket, current_user.id)
     return TicketResponse.from_ticket(ticket)
 
 

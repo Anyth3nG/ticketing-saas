@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -12,7 +12,12 @@ class Notification(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False)
-    comment_id = Column(Integer, ForeignKey("ticket_comments.id"), nullable=False)
+    # Null for a "ticket_assigned" notification -- those aren't tied to any
+    # comment.
+    comment_id = Column(Integer, ForeignKey("ticket_comments.id"), nullable=True)
+    # "comment" (someone replied on a ticket you're on) or "ticket_assigned"
+    # (a manager gave you a new ticket, or reassigned an existing one to you).
+    type = Column(String, nullable=False, default="comment")
     is_read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

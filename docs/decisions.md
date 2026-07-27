@@ -180,6 +180,24 @@ current unfinished occurrence are removed together, but past **completed** month
 (the template is deactivated, not row-deleted, so their `template_id` foreign key stays valid
 for Archive history).
 
+## "Yulia's Work" admin view: hardcoded emails, not a role or generic feature
+
+One specific person (identified by email, `daniel2233x@gmail.com`) wanted to see what one
+specific report (`yulia@max-cpa.co.il`) has on her personal work board, without waiting on her
+to share it. The obvious general version — an "admin" role that can view any user's board — was
+rejected: it's a bigger permission surface to get right (view-only? edit? which pages?) for a
+need that, today, is exactly one person wanting to look at exactly one other person's board.
+
+Both emails are hardcoded constants in `backend/routes/admin.py` and `Navbar.jsx`, gating a
+single read-only endpoint and page (`GET /api/admin/yulia-work`, `/admin/yulia-work` — see
+[api.md](api.md)). It's read-only on purpose, too: the existing ticket-permission checks
+(`_can_update_status`, `_can_edit_ticket_fields`) are ownership-based, so most write actions
+wouldn't be authorized from this view anyway even if the UI offered them — better to not offer
+them than to have half of them silently fail.
+
+If a second person needs this, or the same person needs it for a second report, revisit this as
+an actual role rather than adding more hardcoded pairs.
+
 ## Kubernetes: Not used
 
 Kubernetes (EKS) was considered and ruled out. For 15 internal users with a single backend service and database, Kubernetes adds enormous infrastructure complexity, steep learning curve, and significant cost ($150+/month on EKS) with no meaningful benefit at this scale. It can be revisited if the product grows to hundreds of users across multiple services.

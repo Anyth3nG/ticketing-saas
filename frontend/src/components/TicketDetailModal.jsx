@@ -11,7 +11,7 @@ import {
 } from "../api/tickets";
 import StatusDot, { STATUS_LABELS } from "./StatusDot";
 import { CheckIcon, EditIcon, TrashIcon } from "./icons";
-import { formatDate, formatDateTime, formatTimestampDate } from "../utils/date";
+import { formatDate, formatDateTime } from "../utils/date";
 
 const URGENCY_OPTIONS = ["low", "medium", "high"];
 
@@ -231,7 +231,10 @@ export default function TicketDetailModal({
                 <p>{ticket.description || "No description."}</p>
                 <p>Urgency: {ticket.urgency}</p>
                 <p>Due: {formatDate(ticket.due_date)}</p>
-                <p>Created: {formatTimestampDate(ticket.created_at)}</p>
+                <p>Created: {formatDateTime(ticket.created_at)}</p>
+                {ticket.completed_at && (
+                  <p>Completed: {formatDateTime(ticket.completed_at)}</p>
+                )}
                 {canReassign ? (
                   <label className="reassign-control">
                     Assigned to

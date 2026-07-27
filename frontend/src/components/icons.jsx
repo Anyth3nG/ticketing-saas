@@ -121,6 +121,28 @@ export function RepeatIcon(props) {
   );
 }
 
+export function GridIcon(props) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
 export function CommentIcon(props) {
   return (
     <svg
@@ -136,6 +158,26 @@ export function CommentIcon(props) {
       {...props}
     >
       <path d="M2 3.5h12v8H6.5L3 14.5v-3H2z" />
+    </svg>
+  );
+}
+
+export function NewTicketIcon(props) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M12 9v6M9 12h6" />
     </svg>
   );
 }

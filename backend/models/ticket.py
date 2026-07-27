@@ -27,6 +27,11 @@ class Ticket(Base):
     updated_at = Column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+    # Set only by PATCH /tickets/{id}/status when status transitions to
+    # "done" (and cleared if it's ever moved off "done") -- unlike
+    # updated_at, this can't be bumped by an unrelated field edit, so it's
+    # the reliable source for "when was this actually completed" in Archive.
+    completed_at = Column(DateTime, nullable=True)
 
     creator = relationship("User", foreign_keys=[created_by], backref="tickets_created")
     assignee = relationship("User", foreign_keys=[assigned_to], backref="assigned_tickets")
