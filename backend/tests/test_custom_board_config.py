@@ -40,27 +40,35 @@ def test_the_manager_gets_the_custom_layout(db, monkeypatch):
     assert uses_custom_board(_user(db, "other@example.com")) is False
 
 
-@pytest.mark.parametrize("environment", ["prod", "test"])
-def test_the_admin_does_not_get_it_in_deployed_environments(
-    db, monkeypatch, environment
-):
+def test_the_admin_never_gets_it_in_production(db, monkeypatch):
     monkeypatch.setenv("ADMIN_EMAIL", ADMIN)
     monkeypatch.setenv("MANAGER_EMAIL", MANAGER)
-    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("ENVIRONMENT", "prod")
 
     admin = _user(db, ADMIN)
     assert is_admin(admin) is True
     assert uses_custom_board(admin) is False
 
 
-def test_the_admin_gets_it_in_development(db, monkeypatch):
-    # This is the testing access: no second account, and nothing to switch off
-    # again afterwards.
+@pytest.mark.parametrize("environment", ["development", "test"])
+def test_the_admin_gets_it_everywhere_else(db, monkeypatch, environment):
+    # The testing access: dev to build it, staging to check it behaves the same
+    # once deployed. Nothing to switch on beforehand or off afterwards.
     monkeypatch.setenv("ADMIN_EMAIL", ADMIN)
     monkeypatch.setenv("MANAGER_EMAIL", MANAGER)
-    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("ENVIRONMENT", environment)
 
     assert uses_custom_board(_user(db, ADMIN)) is True
+
+
+def test_only_the_named_admin_gets_the_extra_layout(db, monkeypatch):
+    # "Not production" is permissive about the environment, so it must stay
+    # strict about who: another manager on staging gets nothing.
+    monkeypatch.setenv("ADMIN_EMAIL", ADMIN)
+    monkeypatch.setenv("MANAGER_EMAIL", MANAGER)
+    monkeypatch.setenv("ENVIRONMENT", "test")
+
+    assert uses_custom_board(_user(db, "someone.else@example.com")) is False
 
 
 def test_the_manager_keeps_it_in_every_environment(db, monkeypatch):
