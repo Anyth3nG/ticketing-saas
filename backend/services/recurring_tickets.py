@@ -1,9 +1,10 @@
 import calendar
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from custom_board import personal_landing_status
 from models import RecurringTicketTemplate, Ticket, User
 
 
@@ -31,11 +32,11 @@ def generate_due_recurring_tickets(db: Session, user: User) -> None:
             )
         )
 
-    month_start = datetime(today.year, today.month, 1)
+    month_start = date(today.year, today.month, 1)
     next_month_start = (
-        datetime(today.year + 1, 1, 1)
+        date(today.year + 1, 1, 1)
         if today.month == 12
-        else datetime(today.year, today.month + 1, 1)
+        else date(today.year, today.month + 1, 1)
     )
 
     # with_for_update() locks each matching template row for the rest of this
@@ -50,12 +51,22 @@ def generate_due_recurring_tickets(db: Session, user: User) -> None:
         # view show what's coming later in the month, not just what's due
         # right now. due_date still reflects the real recurrence day, so
         # Today/Week filtering elsewhere is unaffected.
+        #
+        # Matched on due_date, not created_at. due_date is derived from
+        # `today` and is always inside the current month by construction (see
+        # _clamped_due_date), so it answers "does this month's instance exist
+        # yet" using the same clock the window is built from. created_at is
+        # the wall-clock insert time in UTC, which is a *different* clock from
+        # date.today()'s local one: for the first few hours of the 1st of a
+        # month in a UTC+N timezone, the window is the new month while
+        # created_at is still stamped in the old one, so nothing ever matched
+        # and every request generated another copy of the same ticket.
         already_generated = (
             db.query(Ticket)
             .filter(
                 Ticket.template_id == template.id,
-                Ticket.created_at >= month_start,
-                Ticket.created_at < next_month_start,
+                Ticket.due_date >= month_start,
+                Ticket.due_date < next_month_start,
             )
             .first()
             is not None
@@ -68,7 +79,14 @@ def generate_due_recurring_tickets(db: Session, user: User) -> None:
             description=template.description,
             urgency=template.urgency,
             ticket_type=template.ticket_type,
-            status="to_do" if template.ticket_type == "assigned" else "personal_work",
+            # Every personal template reaching this loop was created by
+            # `user` (both query branches above filter personal templates to
+            # created_by == user.id), so their landing status is theirs.
+            status=(
+                "to_do"
+                if template.ticket_type == "assigned"
+                else personal_landing_status(user)
+            ),
             due_date=due_date,
             created_by=template.created_by,
             assigned_to=template.assigned_to if template.ticket_type == "assigned" else None,

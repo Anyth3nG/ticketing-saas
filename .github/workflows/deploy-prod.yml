@@ -61,6 +61,8 @@ jobs:
           CLERK_SECRET_KEY=${{ secrets.PROD_CLERK_SECRET_KEY }}
           CLERK_FRONTEND_API=${{ secrets.PROD_CLERK_FRONTEND_API }}
           ENVIRONMENT=prod
+          ADMIN_EMAIL=${{ vars.ADMIN_EMAIL }}
+          MANAGER_EMAIL=${{ vars.MANAGER_EMAIL }}
           EOF
           scp -o StrictHostKeyChecking=no /tmp/backend.env ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_PROD }}:~/app/backend/.env
 

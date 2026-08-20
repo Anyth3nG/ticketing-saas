@@ -1,32 +1,39 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
+from custom_board import is_admin, manager_email
 from database import get_db
-from models import RecurringTicketTemplate, Ticket, TicketComment, User
+from models import Meeting, RecurringTicketTemplate, Ticket, TicketComment, User
 from schemas import AdminWorkView, TicketCommentResponse, TicketResponse
 from services.recurring_tickets import generate_due_recurring_tickets
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-# Deliberately hardcoded rather than a generic "view any user's work page as
-# admin" feature: this is a one-off peek at one specific report's board for
-# one specific person, not a permission tier. Revisit before generalizing.
-CEO_EMAIL = "daniel2233x@gmail.com"
-TARGET_EMAIL = "yulia@max-cpa.co.il"
+# The admin looking at the manager's board -- not a permission tier, and not a
+# generic "view any user as admin" feature. Both accounts come from
+# configuration (ADMIN_EMAIL, MANAGER_EMAIL -- see custom_board.py); unset means
+# this page answers for nobody. Revisit the whole route before generalizing it
+# to arbitrary viewers.
 
 
 def require_ceo(user: User = Depends(get_current_user)) -> User:
-    if user.email != CEO_EMAIL:
+    if not is_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     return user
 
 
 def _get_target_or_404(db: Session) -> User:
-    target = db.query(User).filter(User.email == TARGET_EMAIL).first()
+    target_email = manager_email()
+    target = (
+        db.query(User).filter(func.lower(User.email) == target_email).first()
+        if target_email
+        else None
+    )
     if target is None:
-        # Expected outside prod: this account may not have been provisioned
-        # in dev/test.
+        # Expected where the account hasn't been provisioned, or where this
+        # page hasn't been configured at all.
         raise HTTPException(
             status_code=404, detail="Target account not found in this environment"
         )
@@ -58,10 +65,18 @@ def get_yulia_work(db: Session = Depends(get_db), _: User = Depends(require_ceo)
         .all()
     )
 
+    meetings = (
+        db.query(Meeting)
+        .filter(Meeting.user_id == target.id)
+        .order_by(Meeting.starts_at.asc())
+        .all()
+    )
+
     return AdminWorkView(
         user=target,
         tickets=[TicketResponse.from_ticket(t) for t in tickets],
         templates=templates,
+        meetings=meetings,
     )
 
 
