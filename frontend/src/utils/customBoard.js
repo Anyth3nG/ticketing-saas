@@ -6,19 +6,11 @@
 // routes/tickets.py); the copy here only decides which columns to draw, so the
 // two lists have to be kept in step by hand.
 
-export const CUSTOM_BOARD_EMAIL = "yulia@max-cpa.co.il";
-
-// TO TEST THIS BOARD YOURSELF: add your own email to the array below, and the
-// matching one in backend/custom_board.py. Your /manager/work then becomes this
-// board, fully working -- create, edit, comment, drag, meetings -- because it
-// is the same page she gets, running on your own data. Remove both entries to
-// go back to the standard board.
-//
-// Note that ticket statuses differ between the two boards, so personal tickets
-// created while you're on this list sit in columns the standard board has no
-// place for, and vice versa. Migration e4b8d0c71a52 shows the mapping if you
-// ever need to move a batch across.
-const CUSTOM_BOARD_EMAILS = [CUSTOM_BOARD_EMAIL, "daniel2233x@gmail.com"];
+// No account list here on purpose. Who gets this board is decided once, on the
+// server (backend/custom_board.py), and arrives on the user object as
+// `uses_custom_layout`. A copy in the frontend would be baked in at build time
+// with nothing keeping it in step with the backend's answer -- and the two
+// disagreeing means columns drawn that the API refuses to write to.
 
 // Where new personal tickets land before being sorted into a kind.
 export const LANDING_STATUS = "priority";
@@ -82,7 +74,7 @@ export const SHARED_COLUMNS = [
 ];
 
 export function usesCustomBoard(user) {
-  return Boolean(user?.email) && CUSTOM_BOARD_EMAILS.includes(user.email);
+  return Boolean(user?.uses_custom_layout);
 }
 
 export function columnsFor(user) {
