@@ -40,3 +40,75 @@ export function todayISO() {
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${month}-${day}`;
 }
+
+
+/* ------------------------------------------------------------------------
+   Helpers for the date-driven work board (ManagerWorkDashboard /
+   AdminYuliaWork). Shared so the manager's board and the read-only mirror of
+   it can't drift apart.
+   --------------------------------------------------------------------- */
+
+// How many days the header dropdown offers, counting today as the first.
+export const WEEK_LENGTH = 7;
+
+export const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+export function todayLocal() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+// Local-calendar "YYYY-MM-DD". Built from the local getters rather than
+// toISOString(), which converts to UTC first and lands on the wrong day for
+// anyone east of Greenwich for part of the day.
+export function toISODate(date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+// The dates offered by the header dropdown: today plus the following six
+// days, so "the upcoming week" always starts from wherever the user is now
+// rather than from an arbitrary Monday.
+export function upcomingWeek() {
+  const start = todayLocal();
+  return Array.from({ length: WEEK_LENGTH }, (_, offset) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + offset);
+    return d;
+  });
+}
+
+// "19/08" -- day-first numeric, same order as formatDate() above.
+export function formatDayMonth(date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}`;
+}
+
+// "19/08, Wednesday" -- the headline form.
+export function formatHeadingDate(date) {
+  return `${formatDayMonth(date)}, ${WEEKDAY_NAMES[date.getDay()]}`;
+}
+
+// Whether a ticket belongs to the selected day. Due dates arrive as plain
+// "YYYY-MM-DD" strings, and that format sorts lexicographically in date
+// order, so these compare as strings -- no Date parsing, and none of the
+// timezone drift that comes with it.
+//
+// Today is the exception: it also absorbs anything overdue, so work that
+// slipped past its due date stays in front of you instead of disappearing
+// off the back of the board. Any other day matches exactly.
+export function isDueOn(ticket, selectedISO, isToday) {
+  const due = ticket.due_date?.slice(0, 10);
+  if (!due) return false;
+  return isToday ? due <= selectedISO : due === selectedISO;
+}

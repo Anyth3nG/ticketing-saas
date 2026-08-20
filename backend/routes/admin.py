@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
+from custom_board import CUSTOM_BOARD_EMAIL
 from database import get_db
-from models import RecurringTicketTemplate, Ticket, TicketComment, User
+from models import Meeting, RecurringTicketTemplate, Ticket, TicketComment, User
 from schemas import AdminWorkView, TicketCommentResponse, TicketResponse
 from services.recurring_tickets import generate_due_recurring_tickets
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # admin" feature: this is a one-off peek at one specific report's board for
 # one specific person, not a permission tier. Revisit before generalizing.
 CEO_EMAIL = "daniel2233x@gmail.com"
-TARGET_EMAIL = "yulia@max-cpa.co.il"
+TARGET_EMAIL = CUSTOM_BOARD_EMAIL
 
 
 def require_ceo(user: User = Depends(get_current_user)) -> User:
@@ -58,10 +59,18 @@ def get_yulia_work(db: Session = Depends(get_db), _: User = Depends(require_ceo)
         .all()
     )
 
+    meetings = (
+        db.query(Meeting)
+        .filter(Meeting.user_id == target.id)
+        .order_by(Meeting.starts_at.asc())
+        .all()
+    )
+
     return AdminWorkView(
         user=target,
         tickets=[TicketResponse.from_ticket(t) for t in tickets],
         templates=templates,
+        meetings=meetings,
     )
 
 

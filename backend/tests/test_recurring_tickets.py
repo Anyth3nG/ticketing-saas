@@ -1,5 +1,5 @@
 import itertools
-from datetime import date
+from datetime import date, datetime
 
 from models import RecurringTicketTemplate, Ticket, User
 from services import recurring_tickets as svc
@@ -80,6 +80,35 @@ def test_calling_twice_in_same_month_does_not_duplicate(db, monkeypatch):
     )
 
     svc.generate_due_recurring_tickets(db, manager)
+    svc.generate_due_recurring_tickets(db, manager)
+
+    tickets = db.query(Ticket).filter(Ticket.template_id == template.id).all()
+    assert len(tickets) == 1
+
+
+def test_no_duplicate_when_created_at_falls_in_another_month(db, monkeypatch):
+    # Regression: the "already generated this month" check used to compare
+    # created_at -- the wall-clock insert time, in UTC -- against a window
+    # built from date.today(), which is local. Those are different clocks, and
+    # they disagree for the first hours of the 1st of a month in a UTC+N
+    # timezone: the window is the new month while created_at is still stamped
+    # in the old one. Nothing matched, so every request generated another copy.
+    #
+    # created_at is forced well outside the window here to pin the behaviour
+    # regardless of what the real clock says when the suite runs.
+    _freeze_today(monkeypatch)
+    manager = _make_user(db, "manager")
+    worker = _make_user(db, "worker")
+    template = _make_template(
+        db, creator=manager, ticket_type="assigned", recurrence_day=15, assignee=worker
+    )
+
+    svc.generate_due_recurring_tickets(db, manager)
+
+    generated = db.query(Ticket).filter(Ticket.template_id == template.id).one()
+    generated.created_at = datetime(2020, 1, 1)
+    db.commit()
+
     svc.generate_due_recurring_tickets(db, manager)
 
     tickets = db.query(Ticket).filter(Ticket.template_id == template.id).all()

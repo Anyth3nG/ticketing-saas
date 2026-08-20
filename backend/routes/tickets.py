@@ -5,6 +5,11 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from auth import get_current_user, require_manager
+from custom_board import (
+    CUSTOM_STATUSES,
+    personal_landing_status,
+    uses_custom_board,
+)
 from database import get_db
 from models import (
     Notification,
@@ -52,10 +57,19 @@ def _can_edit_ticket_fields(ticket: Ticket, user: User) -> bool:
 
 def _can_update_status(ticket: Ticket, user: User, new_status: str) -> bool:
     if ticket.ticket_type == "personal" and ticket.created_by == user.id:
+        if uses_custom_board(user):
+            # This board's own statuses, plus done so work can still be
+            # finished and reach Archive. Listing them explicitly (rather than
+            # excluding the shared ones) keeps the two vocabularies from
+            # leaking into each other: a custom-board ticket can't be dropped
+            # into personal_work, and nothing here can reach to_do.
+            return new_status in CUSTOM_STATUSES or new_status == "done"
         # Personal work never becomes assigned to_do work, and skips the
         # approval step entirely -- the owner marks it done directly,
         # manager or worker alike.
-        return new_status not in ("to_do", "awaiting_approval")
+        return new_status not in ("to_do", "awaiting_approval") and (
+            new_status not in CUSTOM_STATUSES
+        )
 
     if user.role == "manager":
         # Managers' only status action on tickets they don't own is
@@ -188,12 +202,27 @@ def create_personal_ticket(
             status_code=400, detail="due_date is required when is_recurring is false"
         )
 
+    # A chosen starting column is honored only on a board that offers the
+    # choice, and only for that board's own statuses. PersonalTicketCreate
+    # types `status` as any TicketStatus, which is deliberately weaker than
+    # this: without the membership check a worker could post
+    # status="awaiting_approval" and drop a personal ticket straight into the
+    # approval column, bypassing _can_update_status entirely. Validating the
+    # shape of a value is not the same as authorizing it.
+    status = personal_landing_status(current_user)
+    if (
+        payload.status is not None
+        and uses_custom_board(current_user)
+        and payload.status in CUSTOM_STATUSES
+    ):
+        status = payload.status
+
     ticket = Ticket(
         title=payload.title,
         description=payload.description,
         urgency=payload.urgency,
         ticket_type="personal",
-        status="personal_work",
+        status=status,
         due_date=payload.due_date,
         created_by=current_user.id,
     )

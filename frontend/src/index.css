@@ -49,13 +49,17 @@ h2 {
   color: var(--text-h);
 }
 
+/* Every h1 in the app is a dashboard heading -- Team Board, My Board, My
+   Work, Archive, and the custom board's date picker. Sized here so they all
+   match; at the previous 56px the heading dominated the board under it.
+   letter-spacing is in em so it stays proportional at any size. */
 h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
+  font-size: 32px;
+  letter-spacing: -0.03em;
+  margin: 24px 0;
   @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+    font-size: 26px;
+    margin: 16px 0;
   }
 }
 
@@ -480,6 +484,15 @@ form textarea {
   margin-top: 16px;
 }
 
+/* The custom personal board (see utils/customBoard.js) lays out over two rows
+   instead of one: Priority takes three quarters of the top row with Meetings
+   beside it, and the three sorting columns share the row underneath. Twelve
+   tracks is the smallest grid that divides evenly into both a 9+3 row and a
+   4+4+4 one. Each column's span comes from CUSTOM_COLUMN_SPANS. */
+.kanban-board-custom {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
 .kanban-column {
   border: 1px solid var(--border);
   border-top: 3px solid var(--column-accent, var(--border));
@@ -489,6 +502,36 @@ form textarea {
   flex-direction: column;
   gap: 8px;
   min-height: 560px;
+}
+
+/* Two stacked rows, so a full-height column each would make the board twice
+   as tall as it needs to be. */
+.kanban-board-custom .kanban-column {
+  min-height: 320px;
+}
+
+/* A ticket card is three grid tracks wide, so a column that spans nine fits
+   three cards side by side rather than stacking them one per row. --cards-
+   across is set per column from cardsAcross() in utils/customBoard.js.
+   align-content keeps short columns' cards at the top instead of stretching
+   them down the available height. */
+.kanban-board-custom .kanban-column-body {
+  display: grid;
+  grid-template-columns: repeat(var(--cards-across, 1), minmax(0, 1fr));
+  align-content: start;
+}
+
+/* Below this the twelve tracks get too narrow to hold a ticket card, so the
+   spans are dropped, the columns stack full width, and cards go back to one
+   per row. */
+@media (max-width: 900px) {
+  .kanban-board-custom .kanban-column {
+    grid-column: 1 / -1;
+  }
+
+  .kanban-board-custom .kanban-column-body {
+    --cards-across: 1;
+  }
 }
 
 .kanban-column-header {
@@ -1165,4 +1208,308 @@ form textarea {
 
 .comment-thread textarea {
   max-width: 100%;
+}
+
+/* Manager work board: the page heading is also the board's date filter.
+   See pages/ManagerWorkDashboard.jsx. */
+
+.date-picker {
+  position: relative;
+}
+
+.date-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+
+/* No size of its own -- it inherits the shared h1 rule, so the date reads at
+   exactly the same size as "Team Board" or "Archive" on the other pages. */
+
+.date-picker-caret {
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.date-picker-trigger:hover .date-picker-caret {
+  color: var(--accent);
+}
+
+.date-picker-caret-open {
+  transform: rotate(180deg);
+}
+
+.date-picker-menu {
+  position: absolute;
+  top: calc(100% - 24px);
+  left: 0;
+  z-index: 20;
+  min-width: 280px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.date-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.date-picker-option:hover {
+  background: var(--accent-bg);
+}
+
+.date-picker-option-active {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.date-picker-option-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.date-picker-today-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+/* Leads the row, so it gets a fixed width to keep the weekday names that
+   follow it aligned down the column. */
+.date-picker-option-date {
+  min-width: 48px;
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Fixed width so the counts line up in a column regardless of digit count. */
+.date-picker-option-count {
+  min-width: 28px;
+  padding: 1px 0;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.kanban-column-empty {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+/* Sits above the board on /manager/work. Content-width rather than the
+   full-width .tab-bar, since it's a small control and not the page's subject. */
+.layout-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.layout-switcher .tab {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+}
+
+.layout-switcher-label {
+  margin-right: 2px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* Whose board is being viewed, on the read-only admin mirror -- the heading
+   slot itself is taken by the date picker. */
+.page-header-subject {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+/* "+" in a column header, for adding the thing that column holds. */
+.column-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.column-add-btn:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* Meeting cards. Visibly not ticket cards -- they hold a time rather than a
+   due date and can't be dragged, so they read as a different kind of thing. */
+.meeting-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--column-accent, var(--border));
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  text-align: left;
+}
+
+/* Time, title and place on one line. min-width on the shrinkable children is
+   what lets them actually truncate -- a flex item's default min-width is
+   auto, which refuses to go below the text's own width and would push the
+   line past the card instead. */
+.meeting-card-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Fixed: the one part that must always stay fully readable. */
+.meeting-card-time {
+  flex: none;
+  color: var(--text-h);
+  font-weight: 600;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meeting-card-source {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 10px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+/* Clickable on the owner's own board (opens it for editing); a plain block on
+   the read-only admin mirror. Reset the button defaults so both render the
+   same. */
+.meeting-card-clickable {
+  display: block;
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.meeting-card-clickable:hover {
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+
+/* Takes the slack, and gives it up last -- the title is the thing you're
+   scanning for. */
+.meeting-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-h);
+  font-size: 15px;
+}
+
+/* Truncates first: the place is the most disposable part of the line. */
+.meeting-card-location {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* Full width underneath, and wraps -- notes are the one part worth reading
+   in full on the card. */
+.meeting-card-notes {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* Narrower than the default 480px: this form is a handful of short fields,
+   and at full width they read as stranded. */
+.modal-narrow {
+  width: 380px;
+}
+
+/* The shared form rule caps fields at 400px, which is wider than this modal's
+   content box and would leave all the slack on one side. Here they fill the
+   content box instead, so the gap to the modal edge is equal left and right. */
+.meeting-form input:not([type="checkbox"]),
+.meeting-form textarea,
+.meeting-form select {
+  max-width: none;
+}
+
+/* Side-by-side time fields. */
+.field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.field-row label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Why a form is locked -- currently only for Outlook-sourced meetings. */
+.modal-note {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--social-bg);
+  color: var(--text);
+  font-size: 13px;
 }
