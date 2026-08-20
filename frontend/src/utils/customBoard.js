@@ -1,0 +1,90 @@
+// Mirrors backend/custom_board.py. One account's personal board runs on its
+// own statuses -- organised by kind of work rather than by stage of approval --
+// instead of the shared worker ones. Everyone else is untouched.
+//
+// The backend is what actually enforces this (see _can_update_status in
+// routes/tickets.py); the copy here only decides which columns to draw, so the
+// two lists have to be kept in step by hand.
+
+export const CUSTOM_BOARD_EMAIL = "yulia@max-cpa.co.il";
+
+// TO TEST THIS BOARD YOURSELF: add your own email to the array below, and the
+// matching one in backend/custom_board.py. Your /manager/work then becomes this
+// board, fully working -- create, edit, comment, drag, meetings -- because it
+// is the same page she gets, running on your own data. Remove both entries to
+// go back to the standard board.
+//
+// Note that ticket statuses differ between the two boards, so personal tickets
+// created while you're on this list sit in columns the standard board has no
+// place for, and vice versa. Migration e4b8d0c71a52 shows the mapping if you
+// ever need to move a batch across.
+const CUSTOM_BOARD_EMAILS = [CUSTOM_BOARD_EMAIL, "daniel2233x@gmail.com"];
+
+// Where new personal tickets land before being sorted into a kind.
+export const LANDING_STATUS = "priority";
+
+// Render order, which is also the visual layout order -- see
+// CUSTOM_COLUMN_SPANS below and .kanban-board-custom in index.css.
+export const CUSTOM_COLUMNS = [
+  "priority",
+  "meetings",
+  "project_work",
+  "contact",
+  "send",
+];
+
+// The one column that isn't ticket-backed: it holds Meeting objects (see
+// backend/models/meeting.py), which have a start and an end rather than a
+// status, so nothing can be dragged into or out of it.
+export const MEETINGS_COLUMN = "meetings";
+
+// The columns a ticket can actually occupy -- every column except Meetings.
+// Mirrors CUSTOM_STATUSES in backend/custom_board.py.
+export const CUSTOM_TICKET_STATUSES = CUSTOM_COLUMNS.filter(
+  (status) => status !== MEETINGS_COLUMN
+);
+
+// One ticket card is this many grid tracks wide. Every column span is a
+// multiple of it, so a column's width says exactly how many cards sit side by
+// side inside it.
+export const TICKET_SPAN = 3;
+
+// Widths on a 12-column grid. Priority is where everything lands and needs the
+// most room, so it takes three quarters of the top row with Meetings beside
+// it. Underneath, Project-Work gets double the width of Contact and Send.
+//
+//   +---------------------------------------+-------------+
+//   |              PRIORITY (9)             | MEETINGS (3)|
+//   |          3 cards across               |  1 across   |
+//   +---------------------------+-----------+-------------+
+//   |     PROJECT-WORK (6)      | CONTACT(3)|   SEND (3)  |
+//   |       2 cards across      |  1 across |  1 across   |
+//   +---------------------------+-----------+-------------+
+export const CUSTOM_COLUMN_SPANS = {
+  priority: 9,
+  meetings: 3,
+  project_work: 6,
+  contact: 3,
+  send: 3,
+};
+
+// How many ticket cards fit side by side in a column, derived from its width
+// rather than listed separately so the two can't fall out of step.
+export function cardsAcross(status) {
+  return (CUSTOM_COLUMN_SPANS[status] ?? TICKET_SPAN) / TICKET_SPAN;
+}
+
+export const SHARED_COLUMNS = [
+  "to_do",
+  "personal_work",
+  "working_on",
+  "awaiting_approval",
+];
+
+export function usesCustomBoard(user) {
+  return Boolean(user?.email) && CUSTOM_BOARD_EMAILS.includes(user.email);
+}
+
+export function columnsFor(user) {
+  return usesCustomBoard(user) ? CUSTOM_COLUMNS : SHARED_COLUMNS;
+}
