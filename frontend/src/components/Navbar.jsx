@@ -10,16 +10,17 @@ import { GridIcon } from "./icons";
 
 const DASHBOARD_PATHS = ["/", "/worker", "/manager"];
 
-// Hardcoded rather than a role: gates the one-off "view Yulia's work page"
-// link (see AdminYuliaWork.jsx / backend/routes/admin.py) to this one account.
-const CEO_EMAIL = "daniel2233x@gmail.com";
+// Whether the "view the manager's work page" link is drawn comes from the user
+// object's `is_admin`, decided server-side (backend/custom_board.py). The route
+// itself is what actually enforces access; this only hides a link that would
+// 403 anyway.
 
 export default function Navbar() {
   const { user } = useUser();
   const { getToken } = useAuth();
   const { pathname } = useLocation();
   const [role, setRole] = useState(null);
-  const [email, setEmail] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [dashboardLayout, setDashboardLayout] = useState(null);
   const [layoutWorkers, setLayoutWorkers] = useState([]);
   const [showLayoutEditor, setShowLayoutEditor] = useState(false);
@@ -36,7 +37,7 @@ export default function Navbar() {
       const currentUser = await getCurrentUser(token);
       if (!cancelled) {
         setRole(currentUser.role);
-        setEmail(currentUser.email);
+        setIsAdmin(Boolean(currentUser.is_admin));
         setDashboardLayout(currentUser.dashboard_layout);
       }
     }
@@ -89,7 +90,7 @@ export default function Navbar() {
       >
         Archive
       </Link>
-      {email === CEO_EMAIL && (
+      {isAdmin && (
         <Link
           className={"navbar-link" + (isYuliaWork ? " navbar-link-active" : "")}
           to="/admin/yulia-work"

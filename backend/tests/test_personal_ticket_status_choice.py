@@ -4,8 +4,18 @@ Offered only on the custom board (see backend/custom_board.py). The field is
 typed as any TicketStatus, so the route -- not the schema -- is what keeps a
 caller from placing a ticket somewhere they shouldn't.
 """
+import pytest
 from conftest import make_user
-from custom_board import CUSTOM_BOARD_EMAIL
+
+CUSTOM_BOARD_EMAIL = "custom-board@example.com"
+
+
+@pytest.fixture(autouse=True)
+def custom_board_configured(monkeypatch):
+    # Who gets this board is environment configuration, so the tests name their
+    # own account rather than depending on whatever the checkout is set to.
+    monkeypatch.setenv("MANAGER_EMAIL", CUSTOM_BOARD_EMAIL)
+    monkeypatch.delenv("ADMIN_EMAIL", raising=False)
 
 
 def _payload(**overrides):

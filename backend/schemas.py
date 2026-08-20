@@ -3,6 +3,11 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+# Aliased on import: these read as predicates about a user, and the local names
+# would otherwise collide with the computed fields of the same name below.
+from custom_board import is_admin as _is_admin
+from custom_board import uses_custom_board as _uses_custom_board
+
 Urgency = Literal["low", "medium", "high"]
 TicketStatus = Literal[
     # Shared statuses: the manager/worker flow.
@@ -33,6 +38,20 @@ class UserResponse(BaseModel):
     role: str
     created_at: datetime
     dashboard_layout: Optional[list[int]] = None
+
+    # Derived server-side rather than re-decided in the browser: the frontend
+    # would otherwise need its own copy of ADMIN_EMAIL / MANAGER_EMAIL, baked
+    # in at build time, with nothing keeping the two in step. See
+    # custom_board.py.
+    @computed_field
+    @property
+    def is_admin(self) -> bool:
+        return _is_admin(self)
+
+    @computed_field
+    @property
+    def uses_custom_layout(self) -> bool:
+        return _uses_custom_board(self)
 
 
 class DashboardLayoutUpdate(BaseModel):
