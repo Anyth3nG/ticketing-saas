@@ -29,7 +29,7 @@ CUSTOM_STATUSES = ("priority", "project_work", "contact", "send")
 # Where newly created personal tickets land before being sorted into a kind.
 LANDING_STATUS = "priority"
 
-DEVELOPMENT = "development"
+PRODUCTION = "prod"
 
 
 def _email(var: str) -> str:
@@ -44,10 +44,8 @@ def manager_email() -> str:
     return _email("MANAGER_EMAIL")
 
 
-def is_development() -> bool:
-    # Exact match, so anything unexpected -- a missing variable, a typo, an
-    # environment nobody thought about -- reads as "not development".
-    return os.getenv("ENVIRONMENT") == DEVELOPMENT
+def is_production() -> bool:
+    return os.getenv("ENVIRONMENT") == PRODUCTION
 
 
 def is_admin(user) -> bool:
@@ -56,16 +54,25 @@ def is_admin(user) -> bool:
 
 
 def uses_custom_board(user) -> bool:
-    """Whether this account's personal board uses the custom columns.
+    """Whether this account's personal board offers the custom columns.
 
-    The manager always. The admin only in local development -- that's the
-    testing access, and it means no extra variable to set and unset, and no
-    risk of a testing entry being left switched on in production.
+    The manager, everywhere -- it's her board.
+
+    The admin, everywhere except production. That's the testing access: dev for
+    building it, staging for checking it behaves the same once deployed. Tying
+    it to the environment rather than a list of extra addresses means there is
+    nothing to switch on before testing and nothing to remember to switch off,
+    and no way for a testing entry to reach production by being forgotten.
+
+    Note "not production" rather than "is development": an unset or unexpected
+    ENVIRONMENT therefore grants it. That is the safe direction here -- the
+    worst case is the admin seeing an extra layout option on their own board,
+    whereas failing closed would silently remove their access to test.
     """
     manager = manager_email()
     if manager and _matches(user, manager):
         return True
-    return is_development() and is_admin(user)
+    return not is_production() and is_admin(user)
 
 
 def _matches(user, email: str) -> bool:

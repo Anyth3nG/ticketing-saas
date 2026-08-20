@@ -39,9 +39,15 @@ export function layoutsFor(user) {
   return WORK_LAYOUTS.filter((layout) => !layout.restricted || usesCustomBoard(user));
 }
 
-// What to show before any choice is made: the account's own board, so someone
-// whose board is the day view lands on it rather than having to pick.
+// What to show before any choice is made.
+//
+// The manager lands on the day view -- it's her board, not a preview. The
+// admin lands on the standard board even though they may switch, because their
+// own work lives in the shared statuses; defaulting them into the day view
+// would open on columns none of their tickets are in, which reads as data
+// loss rather than as a different layout.
 export function defaultLayoutId(user) {
+  if (user?.is_admin) return DEFAULT_LAYOUT_ID;
   return usesCustomBoard(user) ? "day" : DEFAULT_LAYOUT_ID;
 }
 
