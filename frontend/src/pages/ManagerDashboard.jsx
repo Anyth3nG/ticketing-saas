@@ -10,12 +10,31 @@ import { formatDate, todayISO } from "../utils/date";
 import { applyDashboardOrder, initials } from "../utils/format";
 
 const LEGEND_STATUSES = ["to_do", "personal_work", "working_on", "awaiting_approval"];
+
+// Personal work sits apart, at the right-hand edge of the legend: it is the one
+// entry that isn't work the manager handed out. Derived from LEGEND_STATUSES
+// rather than listed again -- that stays the canonical list, read by the filter
+// state and the per-worker dots, so this changes presentation only.
+const TRAILING_LEGEND_STATUS = "personal_work";
+const LEGEND_ORDER = [
+  ...LEGEND_STATUSES.filter((s) => s !== TRAILING_LEGEND_STATUS),
+  TRAILING_LEGEND_STATUS,
+];
 const URGENCY_OPTIONS = ["low", "medium", "high"];
 
 const ALL_STATUSES_VISIBLE = LEGEND_STATUSES.reduce(
   (acc, s) => ({ ...acc, [s]: true }),
   {}
 );
+
+// Personal work is a kind of ticket, not a stage of one. A worker may move
+// their own personal ticket into working_on, but this board is about the work
+// the manager handed out: personal tickets stay under Personal Work whatever
+// status they carry, so Working On only ever shows the manager's own work.
+const isManagerWork = (ticket) => ticket.ticket_type !== "personal";
+
+const boardStatus = (ticket) =>
+  isManagerWork(ticket) ? ticket.status : "personal_work";
 
 function CreateTicketForm({ workers, onClose, onCreated }) {
   const { getToken } = useAuth();
@@ -250,6 +269,7 @@ export default function ManagerDashboard() {
   if (!user && status === "error") return <p className="state-message">Failed to load dashboard.</p>;
 
   const today = todayISO();
+  const managerWorkCount = tickets.filter(isManagerWork).length;
   const awaitingApprovalCount = tickets.filter((t) => t.status === "awaiting_approval").length;
   const overdueCount = tickets.filter((t) => t.due_date < today).length;
 
@@ -267,7 +287,7 @@ export default function ManagerDashboard() {
       <div className="stat-row">
         <div className="stat-tile">
           <span className="stat-label">Open tickets</span>
-          <span className="stat-value">{tickets.length}</span>
+          <span className="stat-value">{managerWorkCount}</span>
         </div>
         <div className="stat-tile stat-tile-success stat-tile-with-action">
           <div className="stat-tile-main">
@@ -292,15 +312,16 @@ export default function ManagerDashboard() {
       </div>
 
       <div className="status-legend">
-        {LEGEND_STATUSES.map((s) => {
+        {LEGEND_ORDER.map((s) => {
           const isActiveForAll =
             workers.length > 0 &&
             workers.every((w) => (statusFilters[w.id] || ALL_STATUSES_VISIBLE)[s]);
+          const trailing = s === TRAILING_LEGEND_STATUS ? " status-legend-item-trailing" : "";
           return (
             <button
               key={s}
               type="button"
-              className={`status-legend-item${isActiveForAll ? "" : " status-legend-item-inactive"}`}
+              className={`status-legend-item${isActiveForAll ? "" : " status-legend-item-inactive"}${trailing}`}
               onClick={() => toggleStatusFilterForAll(s)}
               aria-pressed={isActiveForAll}
               title={`${isActiveForAll ? "Hide" : "Show"} ${STATUS_LABELS[s]} for all workers`}
@@ -319,8 +340,9 @@ export default function ManagerDashboard() {
               t.assignee?.id === worker.id ||
               (t.ticket_type === "personal" && t.created_by === worker.id)
           );
+          const managerWorkCountForWorker = workerTickets.filter(isManagerWork).length;
           const activeFilter = statusFilters[worker.id] || ALL_STATUSES_VISIBLE;
-          const displayedTickets = workerTickets.filter((t) => activeFilter[t.status]);
+          const displayedTickets = workerTickets.filter((t) => activeFilter[boardStatus(t)]);
 
           return (
             <div key={worker.id} className="worker-box">
@@ -339,7 +361,7 @@ export default function ManagerDashboard() {
                     </span>
                   )}
                   <h2>{worker.name}</h2>
-                  <span className="worker-ticket-count">{workerTickets.length}</span>
+                  <span className="worker-ticket-count">{managerWorkCountForWorker}</span>
                 </div>
                 <div className="worker-status-filter">
                   {LEGEND_STATUSES.map((s) => (
@@ -366,9 +388,10 @@ export default function ManagerDashboard() {
               <ul className="worker-ticket-list">
                 {displayedTickets.map((ticket) => {
                   const isOverdue = ticket.due_date < today;
+                  const rowStatus = boardStatus(ticket);
                   return (
                     <li key={ticket.id} className="worker-ticket-row">
-                      {ticket.status === "awaiting_approval" ? (
+                      {rowStatus === "awaiting_approval" ? (
                         <button
                           type="button"
                           className="worker-ticket-approve"
@@ -379,7 +402,7 @@ export default function ManagerDashboard() {
                           <CheckIcon />
                         </button>
                       ) : (
-                        <StatusDot status={ticket.status} />
+                        <StatusDot status={rowStatus} />
                       )}
                       <button
                         type="button"
