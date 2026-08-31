@@ -770,6 +770,13 @@ form textarea {
   opacity: 0.45;
 }
 
+/* Pushed to the right-hand edge of the legend row, away from the three
+   manager-work statuses. The legend wraps, so this lands at the edge of
+   whichever row it ends up on. */
+.status-legend-item-trailing {
+  margin-left: auto;
+}
+
 .manager-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
