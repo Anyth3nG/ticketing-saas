@@ -131,6 +131,39 @@ def get_current_user(
             datetime.utcnow() - user.synced_at > PROFILE_SYNC_INTERVAL
         )
         if stale:
+            # Claim the sync BEFORE the network call, not after it.
+            #
+            # This dependency runs on every authenticated request, and the
+            # dashboards fire three in parallel on load (getCurrentUser,
+            # getTickets, getUsers). Committing synced_at only after the fetch
+            # meant all three read the same stale row, all three found it
+            # stale, and all three paid their own ~700ms round trip to Clerk
+            # before any of them wrote anything -- turning one refresh into
+            # three, in series with the page's first paint. Claiming first
+            # means the other two see a fresh row and skip straight through.
+            #
+            # This narrows the race, it does not close it: two requests can
+            # still both read the row before either commits. The window drops
+            # from the length of a network call to the length of a commit,
+            # which is enough for the case that actually hurts. A real lock
+            # would need SELECT ... FOR UPDATE, which is not worth holding a
+            # row lock on every authenticated request for a best-effort
+            # profile refresh.
+            #
+            # The cost: a failed fetch now waits out the full interval before
+            # retrying, rather than being retried by the very next request.
+            # That is the right trade for something whose failure path is
+            # already "carry on with the last-known profile".
+            try:
+                user.synced_at = datetime.utcnow()
+                db.commit()
+                db.refresh(user)
+            except SQLAlchemyError:
+                # Couldn't claim it -- serve the row already loaded rather
+                # than failing the request over a profile refresh.
+                db.rollback()
+                return user
+
             try:
                 email, name, avatar_url = _fetch_clerk_profile(clerk_id)
                 if email:
@@ -138,7 +171,6 @@ def get_current_user(
                 if name:
                     user.name = name
                 user.avatar_url = avatar_url
-                user.synced_at = datetime.utcnow()
                 db.commit()
                 db.refresh(user)
             except httpx.HTTPError:
