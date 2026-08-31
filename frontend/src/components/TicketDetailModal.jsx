@@ -10,7 +10,7 @@ import {
   updateTicketStatus,
 } from "../api/tickets";
 import StatusDot, { STATUS_LABELS } from "./StatusDot";
-import { CheckIcon, EditIcon, TrashIcon } from "./icons";
+import { CheckIcon, EditIcon, ReturnIcon, TrashIcon } from "./icons";
 import { formatDate, formatDateTime } from "../utils/date";
 
 const URGENCY_OPTIONS = ["low", "medium", "high"];
@@ -75,6 +75,27 @@ export default function TicketDetailModal({
     try {
       const token = await getToken();
       const updated = await updateTicketStatus(token, ticketId, "done");
+      setTicket(updated);
+      onChanged?.();
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  // The other outcome of a review: the work needs redoing, so it goes back to
+  // to_do (Managers work) and the assignee is notified by the backend. Kept
+  // separate from a rejection comment -- the manager can leave one here too,
+  // and that notifies on its own.
+  async function handleReturnForRedo() {
+    if (
+      !window.confirm(
+        "Send this back to be redone? It returns to Managers work and the assignee is notified."
+      )
+    )
+      return;
+    try {
+      const token = await getToken();
+      const updated = await updateTicketStatus(token, ticketId, "to_do");
       setTicket(updated);
       onChanged?.();
     } catch {
@@ -199,6 +220,17 @@ export default function TicketDetailModal({
                   title="Mark as done"
                 >
                   <CheckIcon />
+                </button>
+              )}
+              {showApprove && (
+                <button
+                  type="button"
+                  className="icon-btn btn-critical modal-edit-btn"
+                  onClick={handleReturnForRedo}
+                  aria-label="Send back to be redone"
+                  title="Send back to be redone"
+                >
+                  <ReturnIcon />
                 </button>
               )}
               {!editing && canEdit && (

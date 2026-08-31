@@ -212,7 +212,7 @@ class AdminWorkView(BaseModel):
     meetings: list[MeetingResponse] = []
 
 
-NotificationType = Literal["comment", "ticket_assigned"]
+NotificationType = Literal["comment", "ticket_assigned", "ticket_returned"]
 
 
 class NotificationResponse(BaseModel):

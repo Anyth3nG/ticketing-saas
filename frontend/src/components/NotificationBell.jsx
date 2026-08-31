@@ -6,8 +6,27 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../api/notifications";
-import { BellIcon, CommentIcon, NewTicketIcon } from "./icons";
+import { AlertIcon, BellIcon, CommentIcon, NewTicketIcon } from "./icons";
 import { formatDateTime } from "../utils/date";
+
+// Looked up per type rather than branched on, because only "comment" carries a
+// comment: ticket_assigned and ticket_returned have comment === null, and the
+// old "assigned, else it's a comment" shape would dereference that on any
+// third type.
+const NOTIFICATION_ICONS = {
+  comment: CommentIcon,
+  ticket_assigned: NewTicketIcon,
+  ticket_returned: AlertIcon,
+};
+
+function notificationPreview(notification) {
+  if (notification.type === "ticket_assigned") return "New ticket assigned to you";
+  if (notification.type === "ticket_returned")
+    return "Returned for a redo — back under Managers work";
+  return notification.comment
+    ? `${notification.comment.user.name}: ${notification.comment.content}`
+    : "";
+}
 
 export default function NotificationBell({ role }) {
   const { getToken } = useAuth();
@@ -107,25 +126,26 @@ export default function NotificationBell({ role }) {
           {notifications.length === 0 && (
             <p className="notification-empty">No notifications yet.</p>
           )}
-          {notifications.map((n) => (
-            <button
-              key={n.id}
-              type="button"
-              className="notification-item"
-              onClick={() => handleSelect(n)}
-            >
-              <span className="notification-item-title">
-                {n.type === "ticket_assigned" ? <NewTicketIcon /> : <CommentIcon />}
-                <span className="ticket-number">#{n.ticket_id}</span> {n.ticket_title}
-              </span>
-              <span className="notification-item-preview">
-                {n.type === "ticket_assigned"
-                  ? "New ticket assigned to you"
-                  : `${n.comment.user.name}: ${n.comment.content}`}
-              </span>
-              <span className="notification-item-time">{formatDateTime(n.created_at)}</span>
-            </button>
-          ))}
+          {notifications.map((n) => {
+            const Icon = NOTIFICATION_ICONS[n.type] || CommentIcon;
+            return (
+              <button
+                key={n.id}
+                type="button"
+                className="notification-item"
+                onClick={() => handleSelect(n)}
+              >
+                <span className="notification-item-title">
+                  <Icon />
+                  <span className="ticket-number">#{n.ticket_id}</span> {n.ticket_title}
+                </span>
+                <span className="notification-item-preview">{notificationPreview(n)}</span>
+                <span className="notification-item-time">
+                  {formatDateTime(n.created_at)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

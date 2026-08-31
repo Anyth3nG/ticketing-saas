@@ -72,9 +72,15 @@ def _can_update_status(ticket: Ticket, user: User, new_status: str) -> bool:
         )
 
     if user.role == "manager":
-        # Managers' only status action on tickets they don't own is
-        # approving finished work.
-        return ticket.status == "awaiting_approval" and new_status == "done"
+        # A manager's only status actions on tickets they don't own are the two
+        # outcomes of a review: approve the work (done), or send it back to be
+        # redone (to_do, which puts it under Managers work again). Both start
+        # from awaiting_approval -- a manager still can't reach in and move
+        # work that is merely in progress.
+        return ticket.status == "awaiting_approval" and new_status in (
+            "done",
+            "to_do",
+        )
 
     if not _can_view_ticket(ticket, user):
         return False
@@ -109,6 +115,25 @@ def _notify_ticket_assigned(db: Session, ticket: Ticket, actor_id: int) -> None:
             user_id=ticket.assigned_to,
             ticket_id=ticket.id,
             type="ticket_assigned",
+        )
+    )
+    db.commit()
+
+
+def _notify_ticket_returned(db: Session, ticket: Ticket, actor_id: int) -> None:
+    """Tell the assignee a manager sent their finished work back for a redo.
+
+    Same shape as _notify_ticket_assigned: no comment_id, because the return
+    itself isn't a comment -- a manager who wants to say why leaves one
+    separately, which notifies on its own.
+    """
+    if ticket.assigned_to is None or ticket.assigned_to == actor_id:
+        return
+    db.add(
+        Notification(
+            user_id=ticket.assigned_to,
+            ticket_id=ticket.id,
+            type="ticket_returned",
         )
     )
     db.commit()
@@ -404,9 +429,17 @@ def update_ticket_status(
     elif payload.status != "done" and ticket.status == "done":
         ticket.completed_at = None
 
+    # Read before the write, so the notification below can tell a review
+    # rejection apart from any other move into to_do.
+    was_awaiting_approval = ticket.status == "awaiting_approval"
+
     ticket.status = payload.status
     db.commit()
     db.refresh(ticket)
+
+    if was_awaiting_approval and payload.status == "to_do":
+        _notify_ticket_returned(db, ticket, current_user.id)
+
     return TicketResponse.from_ticket(ticket)
 
 
