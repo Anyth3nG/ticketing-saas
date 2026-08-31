@@ -271,7 +271,9 @@ export default function ManagerDashboard() {
   const today = todayISO();
   const managerWorkCount = tickets.filter(isManagerWork).length;
   const awaitingApprovalCount = tickets.filter((t) => t.status === "awaiting_approval").length;
-  const overdueCount = tickets.filter((t) => t.due_date < today).length;
+  const overdueCount = tickets.filter(
+    (t) => isManagerWork(t) && t.due_date < today
+  ).length;
 
   return (
     <div>
