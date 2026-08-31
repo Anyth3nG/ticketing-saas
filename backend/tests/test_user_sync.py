@@ -102,6 +102,46 @@ def test_clerk_failure_on_refresh_keeps_serving_stale_profile(db, monkeypatch):
     assert result.name == "Old Name"
 
 
+def test_stale_sync_is_claimed_before_the_clerk_call(db, monkeypatch):
+    """The refresh marks itself done up front, so parallel requests skip it.
+
+    Every authenticated request runs this dependency and the dashboards fire
+    three at once on load. If synced_at were only written after the fetch, all
+    three would find the row stale and each would pay its own round trip to
+    Clerk. Claiming first is what stops one refresh becoming three -- so the
+    claim has to survive even when the fetch itself fails.
+    """
+    stale_at = datetime.utcnow() - timedelta(hours=2)
+    user = User(
+        clerk_id="clerk_claim",
+        email="old@example.com",
+        name="Old Name",
+        role="worker",
+        synced_at=stale_at,
+    )
+    db.add(user)
+    db.commit()
+
+    _stub_jwt(monkeypatch, "clerk_claim")
+
+    calls = []
+
+    def _raise_and_count(clerk_id):
+        calls.append(clerk_id)
+        raise httpx.ConnectError("clerk is down")
+
+    monkeypatch.setattr(auth, "_fetch_clerk_profile", _raise_and_count)
+
+    first = auth.get_current_user(credentials=_creds(), db=db)
+    assert first.name == "Old Name"
+    assert first.synced_at > stale_at, "the sync slot should have been claimed"
+
+    # A second request arriving right behind the first now sees a fresh row and
+    # must not call Clerk again.
+    auth.get_current_user(credentials=_creds(), db=db)
+    assert len(calls) == 1
+
+
 def test_db_error_on_lookup_returns_503_not_500(db, monkeypatch):
     # Reproduces the prod incident: the users SELECT fails (e.g. DB behind on
     # migrations, missing avatar_url/synced_at columns). Must surface a clean
