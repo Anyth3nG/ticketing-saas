@@ -1,0 +1,74 @@
+# Deployed stack (test and prod). Runs on the EC2 box; images are PULLED from
+# GHCR, never built here -- the instance is small and stops nightly, and a
+# build on it would be both slow and a second place for the result to differ
+# from what CI tested.
+#
+# Lives alongside a rendered backend.env and a rendered proxy conf.d, both
+# produced by CI and copied over. See deploy.sh.
+#
+# THE CRM JOINS THIS FILE. When the CRM is deployed, its backend and frontend
+# services are added here rather than to a compose project of their own: they
+# need the same Postgres engine and the same proxy, and one file means one
+# `docker compose up -d` and one network with no external-network wiring.
+
+name: maxcpa
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ticketing_saas
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs ONCE, on an empty data directory only. It creates the CRM's
+      # database alongside this one so that adding the CRM later does not
+      # require re-initialising a volume that by then holds live data.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ticketing_saas"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  ticketing-backend:
+    image: ${BACKEND_IMAGE}
+    env_file:
+      - backend.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ticketing-frontend:
+    # The Clerk publishable key is already baked into this image; there is
+    # nothing to configure at runtime.
+    image: ${FRONTEND_IMAGE}
+    depends_on:
+      - ticketing-backend
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./proxy-conf.d:/etc/nginx/conf.d:ro
+      # Certbot runs on the HOST and writes here; nginx only reads. Read-only
+      # is deliberate -- nothing in this container should be able to alter a
+      # certificate.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # The ACME http-01 challenge directory, shared with host certbot. The
+      # proxy owns :80, so certbot cannot use --standalone or --nginx; it
+      # writes challenge files into this directory and nginx serves them.
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      - ticketing-backend
+      - ticketing-frontend
+    restart: unless-stopped
+
+volumes:
+  pgdata:

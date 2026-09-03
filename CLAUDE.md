@@ -8,32 +8,58 @@ Internal ticketing and work distribution SaaS for a small team of ~15 users. All
 
 - **Frontend**: React + Vite
 - **Backend**: Python + FastAPI
-- **Database**: PostgreSQL (local to EC2)
+- **Database**: PostgreSQL (a container on the EC2 box, shared with the CRM in a separate `crm` database)
 - **Auth**: Clerk — accounts are provisioned by hand (manager sets an initial password per user); self-serve sign-up is disabled, so no unknown accounts can be created
-- **Hosting**: AWS S3 + CloudFront (frontend), AWS EC2 (backend)
-- **CI/CD**: GitHub Actions
+- **Hosting**: Docker Compose on AWS EC2, behind an nginx proxy container. **Same origin** — one hostname serves the SPA and the API, so there is no CORS config and no API base URL in the bundle
+- **CI/CD**: GitHub Actions building images to GHCR; the box only pulls
+
+> **Cutover pending.** Prod still runs the previous bare-metal deployment
+> (systemd + host nginx + S3 frontend). See [docs/deployment.md](docs/deployment.md)
+> for both models and the cutover runbook — and read it before changing
+> anything under `deploy/` or `.github/workflows/`.
 
 ## Repository Structure
 
 ```
 /
-├── frontend/        ← React + Vite app
+├── frontend/        ← React + Vite app (Dockerfile builds and serves it)
 ├── backend/         ← Python + FastAPI app
-├── docs/            ← Project documentation
+│   └── deploy/      ← SUPERSEDED bare-metal nginx scripts; still live until cutover
+├── proxy/           ← shared reverse proxy config
+│   ├── conf.d/      ← local development
+│   └── deploy/      ← production server-block templates
+├── deploy/          ← deployed stack: compose file, deploy.sh, cert + env scripts
+├── docs/            ← project documentation
 ├── .claude/         ← Claude Code configuration
 ├── .github/
 │   └── workflows/   ← GitHub Actions CI/CD pipelines
+├── docker-compose.yml   ← local stack, mirrors the production topology
 ├── CLAUDE.md
 └── README.md
 ```
 
 ## Environments
 
-| Environment | Frontend | Backend | Git Branch |
-|---|---|---|---|
-| Dev | Nginx (local VM) | Local FastAPI (port 8000) | Feature branches |
-| Test | S3 + CloudFront | EC2 | `staging` |
-| Prod | S3 + CloudFront | EC2 | `main` |
+| Environment | Serving | Git Branch |
+|---|---|---|
+| Dev | `docker compose up` → http://localhost:8081 | Feature branches |
+| Test | containers on EC2 | `staging` |
+| Prod | containers on EC2 | `main` |
+
+Local uses 8081 because the CRM's stack already uses 8080 and both are checked
+out on the same machine.
+
+## Configuration
+
+`backend/.env.example` is the **single source of truth** for backend config.
+The deploy workflow resolves every key in it from GitHub Variables/Secrets and
+**fails the build** on a missing value. Add a variable there and wire it in the
+workflow's `env:` block — there is no second list.
+
+This exists because the old workflows wrote `backend/.env` from a fixed
+heredoc, so a variable added in GitHub silently arrived empty and the app
+behaved as though the feature had never been configured. Never reintroduce a
+config path that can fail quietly.
 
 ## Development Conventions
 
