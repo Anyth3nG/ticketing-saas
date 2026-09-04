@@ -7,15 +7,17 @@ described here because both currently matter.
 
 | | Bare metal | Containerized |
 |---|---|---|
-| Status | **Live in prod today** | Built, not yet cut over |
+| Status | **Live in prod today** | **Live on test** since 2026-09-04; prod not cut over |
 | Backend | venv + systemd `ticketing-backend` | container |
 | Frontend | S3 static website | container behind the proxy |
 | Postgres | on the instance | container, shared with the CRM |
 | nginx | on the host, configured per deploy | container |
 | Origin | `workload` (S3) + `api-workload` (EC2) | one origin, `workload` |
 
-Until the cutover happens, everything under [Bare metal](#bare-metal-the-current-live-deployment)
-is what is actually serving the firm.
+Until the prod cutover happens, everything under [Bare metal](#bare-metal-the-current-live-deployment)
+is what is actually serving the firm. Test now runs the containerized stack, so
+the two environments deliberately differ — that is the point of the rehearsal,
+not a drift to correct.
 
 ---
 
@@ -51,9 +53,10 @@ Push to main/staging          Manual run (Actions tab)
   [build] ──────────────────────▶ [deploy]
   render-env asserts config      render backend.env + stack.env
   build backend image            scp the stack to the box
-  build frontend image           docker login ghcr.io (read-only token)
-  push both to GHCR, tagged      deploy.sh: pull, up -d, certs, reload
-  by commit SHA                  smoke test https://<domain>/health
+  build frontend image           bootstrap.sh          ← own ssh session
+  push both to GHCR, tagged      docker login ghcr.io (read-only token)
+  by commit SHA                  deploy.sh: pull, handover, up -d, certs
+                                 smoke test https://<domain>/health
 ```
 
 A push **builds and publishes but does not deploy** — see [Cutover](#cutover).
@@ -63,6 +66,47 @@ tested.
 
 Images are tagged by commit SHA rather than `:latest`, so a deploy names one
 immutable image and a rollback is redeploying an older tag.
+
+### Preparing the box
+
+A deploy box built for the bare-metal model has no Docker on it, and its host
+nginx already owns `:80` and `:443`. Two steps close that gap. Both are
+idempotent and become no-ops once a box is prepared, so they stay in the normal
+deploy path rather than being one-time manual work someone has to remember.
+
+**`deploy/bootstrap.sh`** installs Docker Engine and the compose plugin, adds
+the deploy user to the `docker` group, and caps container log size. It comes
+from Docker's own apt repository, not Ubuntu's `docker.io`, because the compose
+*plugin* — `docker compose`, which is what the stack is driven with — ships only
+from there.
+
+> **It must stay its own workflow step.** Group membership is resolved at
+> login, so the session that runs `usermod` does not have it. Chaining
+> bootstrap ahead of `docker login` in one `ssh` call installs Docker
+> correctly and then fails on the socket, one line later. A new step is a new
+> session, which is the entire reason it is separate.
+
+**The port handover** lives in `deploy.sh`, between the pull and `up -d`. It
+stops *and disables* host `nginx` and `ticketing-backend`:
+
+- The proxy container binds `:80`/`:443` **on the host**, so `up` fails with
+  "address already in use" while host nginx holds them. The other three
+  services start anyway and sit there unreachable — which looks exactly like a
+  successful deploy in `docker ps`.
+- The backend unit conflicts with nothing (it binds `127.0.0.1:8000`), but it
+  keeps writing to the bare-metal database after the container database has
+  become the source of truth. Two live datasets, no error on either side.
+- **Disabling matters as much as stopping.** These instances stop and start
+  nightly. An enabled nginx comes back at boot and takes `:80` before Docker
+  does, leaving a stack that passes every container health check while serving
+  the old app. That is a failure that surfaces as "it worked yesterday".
+
+Neither unit is removed. The [rollback](#rollback) below is `docker compose
+down` plus `systemctl start`, and that needs the units and the venv still on
+the box.
+
+The pull happens *before* the handover, so the bare-metal stack keeps serving
+through the slow step and the switch itself takes seconds.
 
 ### Configuration is validated, not assumed
 
@@ -105,6 +149,23 @@ and reloading.
 Port 80 still does **not** redirect to 443, so the origin works whether
 Cloudflare is set to Flexible or Full without needing to know which.
 
+> **Certificates issued before cutover will not auto-renew.** They were issued
+> with `--nginx`, and their renewal config still says
+> `authenticator = nginx` — a host nginx the handover has now disabled.
+> Nothing reports this: renewal fails quietly on certbot's timer, weeks later,
+> and the first symptom is an expired certificate. `setup-certs.sh` rewrites
+> the renewal config to `--webroot` the first time it runs for that hostname,
+> so the fix is simply to let a real deploy run. Until one has,
+> **`api-testing` on test is in this state.** Check with
+> `grep authenticator /etc/letsencrypt/renewal/*.conf`.
+
+Also note that `ticketing-http.conf` puts the app and API hostnames in **one**
+server block, so on `:80` the API hostname serves the SPA too. The `:443`
+config does not — `ticketing-ssl.conf` gives the API hostname its own API-only
+block. So an app that works via the API hostname under Flexible will stop doing
+so at the Full flip. Do not treat that as a way in; it is an artifact of the
+HTTP-only phase.
+
 ### `default_server` is claimed exactly once
 
 `proxy/deploy/conf.d/000-default.conf` owns `default_server` on `:80` and
@@ -119,7 +180,11 @@ development; that keyword must be dropped when its block joins this proxy.
 
 ## Cutover
 
-Not yet done. Deliberately manual, and rehearsed on test first.
+Deliberately manual, and rehearsed on test first.
+
+**Test was cut over on 2026-09-04** — steps 1-4 below are done there and
+passed, including the stop/start. Prod has not been touched. The one thing
+still outstanding on test is step 6, the DNS record.
 
 Both workflows build on push but gate the deploy job behind
 `if: github.event_name == 'workflow_dispatch'`. **Do not merge this to `main`
@@ -128,12 +193,22 @@ and deploy nothing, while the old bare-metal path is gone — prod would simply
 stop receiving deploys. Either cut over in the same session as the merge, or
 keep the branch open until you are ready.
 
-1. Start the test instance (it is normally stopped).
+1. Start the instance (test is normally stopped).
 2. Add the new GitHub secrets and variables below.
-3. `pg_dump` the bare-metal database on test; run the deploy workflow manually;
-   restore into the container; verify.
-4. **Stop and start the instance** and confirm every container comes back. This
-   is the thing that actually breaks nightly, and it is the whole reason test
+3. **Migrate the database.** Order matters, because the backend container runs
+   `alembic upgrade head` on boot:
+   1. `pg_dump --no-owner --no-acl` the bare-metal database and keep the file.
+   2. Bring up **only** Postgres — `docker compose up -d postgres` — and wait
+      for healthy.
+   3. `deploy/restore-baremetal-dump.sh <dump>`. Restoring the whole dump into
+      an empty database brings schema, data *and* `alembic_version` across
+      together, so the backend's migration on first boot is the no-op it
+      should be. Let the backend start first instead and it builds an empty
+      schema that the restore then collides with.
+   4. Run the deploy for real, and verify row counts.
+4. **Stop and start the instance** and confirm every container comes back, and
+   that `nginx` and `ticketing-backend` are still `inactive / disabled`. This is
+   the thing that actually breaks nightly, and it is the whole reason test
    exists.
 5. Repeat on prod, out of hours.
 6. Point Cloudflare's `workload` record at the origin and switch that hostname
@@ -146,9 +221,43 @@ container over the Docker network. It is a secret edit in a pipeline whose
 failure mode is silence, so change it *after* the pipeline rewrite is in place,
 never before.
 
-**Rollback** during cutover: the venv and the systemd unit are left in place
-but stopped, so recovery is `docker compose down`, `systemctl start
-ticketing-backend`, and pointing nginx back at `127.0.0.1:8000`.
+### Until step 6, the old frontend is still being served
+
+This cost an afternoon on test and will do the same on prod. The app hostname
+(`testing` / `workload`) still resolves to the **S3 bucket** until its DNS
+record moves. So after cutover the browser loads the *old* bundle, which has an
+absolute `https://api-.../api/...` URL compiled into it, and fires it at the
+*new* backend — which deliberately carries no CORS middleware, because the new
+frontend is same-origin. The result is a console full of
+
+```
+No 'Access-Control-Allow-Origin' header is present on the requested resource
+```
+
+**Do not add CORS back.** Nothing is broken; two halves of two different
+deployments are talking to each other. It disappears when the record moves.
+Confirm which you are looking at by comparing the `index-*.js` filename the
+browser loaded against the one the origin serves — and check the response
+headers, since S3 answers with `x-amz-request-id`.
+
+To exercise the real stack before the DNS moves, point the hostname at the
+origin in your own `/etc/hosts` and use **http://** (the origin has no
+certificate for that name yet, and does not need one under Flexible).
+
+**Rollback** during cutover: the venv and the systemd units are left in place,
+stopped and disabled, so recovery is
+
+```bash
+cd ~/stack && docker compose --env-file stack.env -f docker-compose.prod.yml down
+sudo systemctl enable --now nginx ticketing-backend
+```
+
+`enable`, not just `start` — the handover disabled both, so a plain `start`
+comes back but does not survive the next nightly boot. The host nginx config is
+untouched by any of this and still points at `127.0.0.1:8000`. Note that this
+also reverts to the bare-metal database: anything written through the
+containerized app since cutover stays in the container volume and is not in the
+bare-metal copy.
 
 ---
 
