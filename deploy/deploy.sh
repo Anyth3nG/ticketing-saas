@@ -53,11 +53,46 @@ else
   render_proxy_conf no
 fi
 
-# --- 2. Pull and start ----------------------------------------------------
+# --- 2. Pull --------------------------------------------------------------
+#
+# Before the handover below, not after: pulling is the slow step, and doing it
+# while the bare-metal stack is still serving keeps the switch to seconds.
 "${COMPOSE[@]}" pull
+
+# --- 3. Hand the host's ports over ----------------------------------------
+#
+# The proxy container binds :80 and :443 ON THE HOST. Until cutover the
+# bare-metal stack still holds both -- host nginx on the ports, the systemd
+# backend behind it -- so `up` would fail with "address already in use". The
+# other three services would start regardless and sit there unreachable, which
+# reads exactly like a working deploy right up until someone opens the site.
+#
+# The backend unit is stopped too. It binds 127.0.0.1:8000 and so conflicts
+# with nothing, but it holds ~200MB on a 2GB box and, more to the point, goes
+# on writing to the bare-metal database after the container database has become
+# the source of truth. Two live datasets, no error either way.
+#
+# Stopped and DISABLED, never removed: the rollback in docs/deployment.md is
+# `docker compose down` + `systemctl start`, which needs the units and the venv
+# still on the box. Disabling matters as much as stopping, because these
+# instances stop and start nightly -- an enabled nginx would come back at boot
+# and take :80 from Docker on the way up.
+handover_host_ports() {
+  local unit
+  for unit in nginx ticketing-backend; do
+    if systemctl is-active --quiet "$unit" 2>/dev/null ||
+       systemctl is-enabled --quiet "$unit" 2>/dev/null; then
+      echo "handover: stopping and disabling ${unit} (bare-metal stack)"
+      sudo systemctl disable --now "$unit" || true
+    fi
+  done
+}
+handover_host_ports
+
+# --- 4. Start -------------------------------------------------------------
 "${COMPOSE[@]}" up -d --remove-orphans
 
-# --- 3. Certificates ------------------------------------------------------
+# --- 5. Certificates ------------------------------------------------------
 #
 # After the proxy is up, because the http-01 challenge is served BY the proxy.
 sudo bash "${STACK_DIR}/setup-certs.sh" "$DOMAIN" "$API_DOMAIN" "$CERTBOT_EMAIL"
@@ -70,7 +105,7 @@ if have_certs && [ ! -f proxy-conf.d/ticketing-ssl.conf ]; then
   "${COMPOSE[@]}" exec -T proxy nginx -s reload
 fi
 
-# --- 4. Tidy --------------------------------------------------------------
+# --- 6. Tidy --------------------------------------------------------------
 #
 # Untagged images accumulate on every deploy and this disk is small. Only
 # dangling ones: a tagged image may be the rollback target.

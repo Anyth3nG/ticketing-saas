@@ -124,6 +124,19 @@ jobs:
           scp -o StrictHostKeyChecking=no -r /tmp/stack/. \
             ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_PROD }}:~/stack/
 
+      # A SEPARATE STEP, AND IT HAS TO STAY ONE.
+      #
+      # Installs Docker if the box has none. It cannot be chained ahead of the
+      # docker login below, because bootstrap.sh adds the deploy user to the
+      # `docker` group and group membership is resolved at login -- the session
+      # that ran usermod does not have it. Same ssh call would install Docker
+      # and then fail on the socket. A new step is a new session.
+      - name: Prepare the box
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_PROD }} "
+            bash ~/stack/bootstrap.sh '${{ vars.EC2_USER }}'
+          "
+
       - name: Deploy
         run: |
           ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_PROD }} "
