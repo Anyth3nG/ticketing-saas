@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 # The interactive docs publish every route, parameter and schema. That's
 # useful locally, but on a public origin it just hands an attacker the full
@@ -18,18 +17,17 @@ app = FastAPI(
     openapi_url=None if _is_prod else "/openapi.json",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost",
-        "http://localhost:5173",
-        "https://testing.max-cpa.co.il",
-        "https://workload.max-cpa.co.il",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# NO CORS MIDDLEWARE, DELIBERATELY.
+#
+# The SPA and this API are served from ONE origin: the shared proxy routes
+# /api here and everything else to the frontend container. Same-origin
+# requests are not subject to CORS at all, so there is nothing to configure --
+# and nothing to forget to add when a hostname changes.
+#
+# It used to be an allow_origins list hardcoded here, which meant a new
+# environment needed a code change and a deploy to be reachable at all. If a
+# genuinely cross-origin caller ever appears, add the middleware back driven
+# by an env var, never by another literal list.
 
 
 @app.get("/health")
