@@ -1,0 +1,77 @@
+# Local development stack.
+#
+# It mirrors the production topology deliberately: the same nginx reverse
+# proxy sits in front, so same-origin /api routing and SPA fallback are
+# exercised locally exactly as they will be on the EC2 box.
+#
+# What differs in production is only that `postgres` here stands in for the
+# SHARED Postgres container that also hosts the CRM's `crm` database, and that
+# the app images are pulled from GHCR rather than built. See
+# deploy/docker-compose.prod.yml.
+#
+# Services are named with a `ticketing-` prefix because in production they
+# share one Docker network with the CRM's containers, where a bare `backend`
+# would collide with the CRM's own.
+
+name: ticketing-saas
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ticketing_dev
+      POSTGRES_PASSWORD: ticketing_dev
+      POSTGRES_DB: ticketing_saas
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketing_dev -d ticketing_saas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  ticketing-backend:
+    build:
+      context: ./backend
+      args:
+        # Local builds include pytest so `docker compose exec
+        # ticketing-backend pytest` works. The deploy build omits it.
+        INSTALL_DEV: "true"
+    env_file:
+      - backend/.env
+    environment:
+      # Overrides whatever backend/.env says, so the container reaches the
+      # service rather than a localhost that holds nothing. Everything else
+      # comes from the env file.
+      DATABASE_URL: postgresql://ticketing_dev:ticketing_dev@postgres:5432/ticketing_saas
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ticketing-frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the bundle at BUILD time, not read at container start.
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+    depends_on:
+      - ticketing-backend
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:1.27-alpine
+    ports:
+      # 8081, not 8080: the CRM's local stack already uses 8080, and both are
+      # checked out on the same machine.
+      - "8081:80"
+    volumes:
+      - ./proxy/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - ticketing-backend
+      - ticketing-frontend
+    restart: unless-stopped
+
+volumes:
+  pgdata:

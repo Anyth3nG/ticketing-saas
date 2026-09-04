@@ -1,6 +1,32 @@
 # Local Development Setup
 
-This guide walks through setting up the full development environment on your local VM.
+## The quick way: Docker Compose
+
+Runs the whole stack in the same shape it runs in production — nginx proxy in
+front, same-origin `/api` routing, SPA fallback — so what works here works
+there.
+
+```bash
+cp backend/.env.example backend/.env    # then fill in the Clerk values
+docker compose up --build
+```
+
+Then open <http://localhost:8081>. (8081, not 8080: the CRM's local stack uses
+8080 and both are usually checked out on the same machine.)
+
+`DATABASE_URL` is overridden by compose to point at the `postgres` service, so
+whatever is in `backend/.env` for it is ignored locally. Migrations run on
+backend start.
+
+```bash
+docker compose exec ticketing-backend pytest      # tests, inside the image
+docker compose logs -f ticketing-backend          # follow the backend
+docker compose down -v                            # stop, discarding the database
+```
+
+Everything below is the manual, no-Docker setup — still supported, and what you
+want if you are running the Vite dev server against a local backend for
+hot reload.
 
 ## Prerequisites
 

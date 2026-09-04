@@ -1,84 +1,132 @@
-name: Deploy to Test
+name: Test
 
+# A push to staging BUILDS and publishes images but does NOT deploy them.
+# Deploying is an explicit manual run from the Actions tab.
+#
+# The test instance is normally STOPPED to save cost, so a deploy here starts
+# with someone starting it. That is also why deploying is manual rather than
+# automatic: a push would otherwise fail against a box that is switched off.
+#
+# AT CUTOVER: delete the `if:` on the deploy job.
 on:
   push:
-    branches:
-      - staging
+    branches: [staging]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-  deploy-frontend:
-    name: Deploy frontend to S3
+  build:
+    name: Build and push images
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      frontend_image: ${{ steps.meta.outputs.frontend_image }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Compute image names
+        id: meta
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          base="${REGISTRY}/${owner}/ticketing-saas"
+          echo "backend_image=${base}-backend:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${base}-frontend:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm install
-
-      - name: Build
-        working-directory: frontend
-        run: npm run build
+      - name: Assert the frontend build args are present
         env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+        run: ./deploy/render-env.sh frontend/.env.example > /dev/null
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: docker/login-action@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sync to S3
-        run: aws s3 sync frontend/dist/ s3://${{ vars.S3_BUCKET_TEST }} --delete
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta.outputs.backend_image }}
 
-  deploy-backend:
-    name: Deploy backend to EC2
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta.outputs.frontend_image }}
+          build-args: |
+            VITE_CLERK_PUBLISHABLE_KEY=${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+
+  deploy:
+    name: Deploy to test
+    needs: build
     runs-on: ubuntu-latest
-
+    # DELETE THIS LINE AT CUTOVER.
+    if: github.event_name == 'workflow_dispatch'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up SSH key
+      - name: Render backend.env
+        env:
+          # EVERY key in backend/.env.example must appear here, or the build
+          # fails. See render-env.sh for why that matters on this project.
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_FRONTEND_API: ${{ secrets.CLERK_FRONTEND_API }}
+          ENVIRONMENT: test
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
+          MANAGER_EMAIL: ${{ vars.MANAGER_EMAIL }}
+        run: ./deploy/render-env.sh backend/.env.example > /tmp/backend.env
+
+      - name: Assemble the stack directory
+        run: |
+          mkdir -p /tmp/stack
+          cp -r deploy/. /tmp/stack/
+          cp -r proxy/deploy/conf.d /tmp/stack/proxy-templates
+          mv /tmp/backend.env /tmp/stack/backend.env
+          cat > /tmp/stack/stack.env <<EOF
+          POSTGRES_USER=${{ secrets.POSTGRES_USER_TEST }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD_TEST }}
+          CRM_DB_PASSWORD=${{ secrets.CRM_DB_PASSWORD_TEST }}
+          BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}
+          FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}
+          EOF
+          chmod +x /tmp/stack/*.sh /tmp/stack/postgres-init/*.sh
+
+      - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 400 ~/.ssh/id_rsa
 
-      - name: Write backend .env
+      - name: Copy the stack to the box
         run: |
-          cat > /tmp/backend.env << 'EOF'
-          DATABASE_URL=${{ secrets.DATABASE_URL_TEST }}
-          CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
-          CLERK_FRONTEND_API=${{ secrets.CLERK_FRONTEND_API }}
-          ENVIRONMENT=test
-          ADMIN_EMAIL=${{ vars.ADMIN_EMAIL }}
-          MANAGER_EMAIL=${{ vars.MANAGER_EMAIL }}
-          EOF
-          scp -o StrictHostKeyChecking=no /tmp/backend.env ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }}:~/app/backend/.env
+          ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }} "mkdir -p ~/stack"
+          scp -o StrictHostKeyChecking=no -r /tmp/stack/. \
+            ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }}:~/stack/
 
-      - name: Deploy to EC2
+      - name: Deploy
         run: |
           ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }} "
-            # Pre-trust GitHub's SSH host key so a rebuilt/replacement instance doesn't fail with \"Host key verification failed\"
-            mkdir -p ~/.ssh && ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null &&
-            cd ~/app &&
-            # Ensures origin uses SSH auth (deploy key), self-heals if the instance repo was ever cloned over HTTPS
-            git remote set-url origin git@github.com:Anyth3nG/ticketing-saas.git &&
-            git fetch origin && git reset --hard origin/staging &&
-            API_DOMAIN=\$(echo '${{ vars.VITE_API_URL }}' | sed -E 's#^https?://##; s#/.*##') &&
-            sudo bash backend/deploy/setup_nginx_tls.sh \"\$API_DOMAIN\" '${{ vars.CERTBOT_EMAIL }}' &&
-            source backend/venv/bin/activate &&
-            pip install -r backend/requirements.txt &&
-            cd backend && alembic upgrade head &&
-            sudo systemctl restart ticketing-backend
+            set -e
+            echo '${{ secrets.GHCR_PULL_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+            API_DOMAIN=\$(echo '${{ vars.VITE_API_URL }}' | sed -E 's#^https?://##; s#/.*##')
+            bash ~/stack/deploy.sh '${{ vars.TEST_DOMAIN }}' \"\$API_DOMAIN\" '${{ vars.CERTBOT_EMAIL }}'
           "
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS "https://${{ vars.TEST_DOMAIN }}/health"; then
+              echo " <- test healthy"; exit 0
+            fi
+            sleep 6
+          done
+          echo "health check never passed" >&2; exit 1
