@@ -293,6 +293,47 @@ bare-metal copy.
 
 ## GitHub Actions secrets and variables
 
+### Where they live, and why every job names an environment
+
+Everything per-environment sits inside a GitHub **Environment** (`test` /
+`prod`); only the values shared by both stay at repository level:
+
+```
+repository level    EC2_USER  CERTBOT_EMAIL  ADMIN_EMAIL  MANAGER_EMAIL
+                    EC2_SSH_KEY  GHCR_PULL_TOKEN  AWS_* (bare metal only)
+
+environment test    EC2_HOST_TEST  TEST_DOMAIN  VITE_*  S3_BUCKET_TEST
+                    DATABASE_URL_TEST  CLERK_*  POSTGRES_*_TEST  CRM_DB_*_TEST
+
+environment prod    the same, PROD-suffixed
+```
+
+**A job sees an environment's values only if it declares that environment.**
+Without it they resolve to an empty string — no error, no warning:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: test        # ← required, on EVERY job that reads config
+```
+
+This is not theoretical. On 2026-09-06 a prod deploy ran with none of them
+declared and executed `aws s3 sync frontend/dist/ s3:// --delete` and
+`scp backend.env ubuntu@:` — writing a `.env` whose `DATABASE_URL` and
+`CLERK_SECRET_KEY` were blank. It failed only because the empty hostname made
+`scp` unresolvable. Had `EC2_HOST_PROD` been set, that file would have landed
+on prod and the service would have come up broken at its next 07:00 start,
+with a green deploy hours behind it.
+
+**The build jobs need it as much as the deploy jobs.** They read
+`VITE_CLERK_PUBLISHABLE_KEY`, which Vite inlines at build time — miss it and
+the build stays green while publishing an image nobody can log into.
+
+Adding `environment:` also makes those jobs subject to that environment's
+protection rules. Useful for prod (required reviewers), but a deploy will then
+sit waiting for approval rather than running.
+
 **Secrets:**
 
 ```
