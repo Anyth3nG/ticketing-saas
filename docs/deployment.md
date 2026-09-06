@@ -284,9 +284,34 @@ EC2_HOST_TEST              EC2_HOST_PROD
 TEST_DOMAIN                PROD_DOMAIN        the app's own hostname
 VITE_API_URL               PROD_API_URL       legacy API hostname, still served
 VITE_CLERK_PUBLISHABLE_KEY PROD_CLERK_PUBLISHABLE_KEY
+CRM_DB_USER_TEST           CRM_DB_USER_PROD   the CRM's role, per environment
 ADMIN_EMAIL                MANAGER_EMAIL
 CERTBOT_EMAIL
 ```
+
+### The CRM's database role, and its one chance
+
+The database is `crm` on every box — isolation is per instance, exactly as
+`ticketing_saas` is the same name on test and prod. What carries the
+environment is the OWNER: `crm_dev` / `crm_test` / `crm_prod`, mirroring
+`ticketing_dev` / `ticketing_test` / `ticketing_prod`. A credential is then
+obviously one environment's when it shows up in a log or a config file.
+
+`CRM_DB_USER_*` and `CRM_DB_PASSWORD_*` are read by
+`postgres-init/01-create-crm-database.sh`, which Postgres runs **once**, on the
+first `up` against an empty volume, and never again. Changing either variable
+afterwards does nothing at all — no error, no re-read. Correcting a name or
+password later means `ALTER ROLE` by hand on the box.
+
+**Prod gets exactly one chance, at cutover.** Set both before the deploy that
+first brings up the stack there.
+
+Both must also be listed in the postgres service's `environment:` block to
+exist inside the container. An `--env-file` supplies values for interpolation
+in the compose file; it puts nothing into the container. They were missing
+there until 2026-09-06, so the script fell through to its `crm`/`crm` defaults
+whatever the workflow had been told — and an init script that "worked" leaves
+nothing to notice.
 
 `TEST_DOMAIN` / `PROD_DOMAIN` are new: with one origin, the app's hostname is
 no longer derivable from the API URL. `VITE_API_URL` / `PROD_API_URL` are kept

@@ -106,6 +106,7 @@ jobs:
           cat > /tmp/stack/stack.env <<EOF
           POSTGRES_USER=${{ secrets.POSTGRES_USER_PROD }}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD_PROD }}
+          CRM_DB_USER=${{ vars.CRM_DB_USER_PROD }}
           CRM_DB_PASSWORD=${{ secrets.CRM_DB_PASSWORD_PROD }}
           BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}
           FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}
