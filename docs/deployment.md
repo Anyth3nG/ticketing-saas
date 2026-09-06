@@ -205,7 +205,37 @@ keep the branch open until you are ready.
       together, so the backend's migration on first boot is the no-op it
       should be. Let the backend start first instead and it builds an empty
       schema that the restore then collides with.
-   4. Run the deploy for real, and verify row counts.
+   4. **Edit `DATABASE_URL_<ENV>` now, and not before.** Two things in it are
+      wrong for a containerized box, and each breaks differently:
+
+      ```
+      postgresql://<POSTGRES_USER_x>:<POSTGRES_PASSWORD_x>@postgres:5432/ticketing_saas
+                   ^^^^^^^^^^^^^^^^^^ must exist as a ROLE   ^^^^^^^^ not localhost
+      ```
+
+      **Host.** Bare metal reads `localhost`, which inside the backend
+      container is the container itself — the backend crash-loops on
+      "connection refused". It must be `postgres`, the compose service name.
+
+      **Role.** `POSTGRES_USER_x` only takes effect on the FIRST `up` against
+      an empty volume. If the volume was ever initialised with a different
+      name, that name is what the database has, and this URL must match it or
+      nothing authenticates. Check rather than assume:
+      `docker exec maxcpa-postgres-1 psql -U <user> -d ticketing_saas -c '\du'`
+
+      Both of these hit test on 2026-09-06: the secret still said
+      `localhost`, and the role was `ticketing` where the secret expected
+      `ticketing_test`. The deploy reported success; the backend restarted in
+      a loop behind it.
+
+      **Not before.** Until the box is containerized this secret is correct as
+      it stands — the bare-metal backend really does reach Postgres on
+      localhost. Editing it early writes an unreachable host into a live
+      `.env` at the next deploy.
+   5. Run the deploy for real, and verify row counts. Check
+      `docker compose ps` shows the backend `Up`, not `Restarting` — a
+      crash-looping backend still leaves the other three services healthy and
+      the deploy green.
 4. **Stop and start the instance** and confirm every container comes back, and
    that `nginx` and `ticketing-backend` are still `inactive / disabled`. This is
    the thing that actually breaks nightly, and it is the whole reason test
