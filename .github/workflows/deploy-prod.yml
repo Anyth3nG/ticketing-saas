@@ -4,6 +4,19 @@ on:
   push:
     branches:
       - main
+  # Manual dispatch, added ahead of the containerization cutover.
+  #
+  # GitHub offers the "Run workflow" button only for a workflow that
+  # declares this trigger ON THE DEFAULT BRANCH. The containerized
+  # workflows live on staging and gate their deploy job behind a manual
+  # run, so without this line here there is no way to reach them: the
+  # button never appears, whichever branch you pick.
+  #
+  # Dispatching selects a ref, and the workflow FILE FROM THAT REF runs.
+  # So choose `staging` to run the containerized deploy. Choosing the
+  # default branch instead runs the bare-metal S3 deploy below, which is
+  # still prod's live path -- not destructive, but not what you want.
+  workflow_dispatch:
 
 jobs:
   deploy-frontend:
