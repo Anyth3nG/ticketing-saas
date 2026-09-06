@@ -20,6 +20,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ticketing_saas
+      # Read ONLY by postgres-init/01-create-crm-database.sh, and only on the
+      # first `up` against an empty volume.
+      #
+      # These have to be listed here to exist at all. An --env-file supplies
+      # values for interpolation IN THIS FILE; it does not put anything inside
+      # the container. Without these two lines the init script saw neither,
+      # fell through to its defaults, and created the CRM role as crm/crm no
+      # matter what the workflow had been told -- silently, since an init
+      # script that "worked" leaves nothing to notice.
+      CRM_DB_USER: ${CRM_DB_USER}
+      CRM_DB_PASSWORD: ${CRM_DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Runs ONCE, on an empty data directory only. It creates the CRM's

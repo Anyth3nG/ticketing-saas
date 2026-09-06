@@ -19,6 +19,16 @@ jobs:
   build:
     name: Build and push images
     runs-on: ubuntu-latest
+    # Every per-environment secret and variable now lives INSIDE this
+    # GitHub Environment, and a job only sees those if it names the
+    # environment. Without this line they resolve to an empty string --
+    # no error, no warning. That is how a prod deploy came to run
+    # `aws s3 sync ... s3://` and `scp ubuntu@:` on 2026-09-06.
+    #
+    # The BUILD job needs it as much as the deploy: it reads the Clerk
+    # publishable key, which Vite inlines at build time. Miss it here and
+    # the build stays green while shipping a bundle nobody can log into.
+    environment: prod
     permissions:
       contents: read
       packages: write
@@ -77,6 +87,7 @@ jobs:
     name: Deploy to prod
     needs: build
     runs-on: ubuntu-latest
+    environment: prod
     # DELETE THIS LINE AT CUTOVER to let a push to main deploy.
     if: github.event_name == 'workflow_dispatch'
     steps:
@@ -106,6 +117,7 @@ jobs:
           cat > /tmp/stack/stack.env <<EOF
           POSTGRES_USER=${{ secrets.POSTGRES_USER_PROD }}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD_PROD }}
+          CRM_DB_USER=${{ vars.CRM_DB_USER_PROD }}
           CRM_DB_PASSWORD=${{ secrets.CRM_DB_PASSWORD_PROD }}
           BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}
           FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}
