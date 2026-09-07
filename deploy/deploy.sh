@@ -4,7 +4,8 @@
 #
 # Expects, already copied into $STACK_DIR by the workflow:
 #   backend.env   rendered from backend/.env.example (see render-env.sh)
-#   stack.env     POSTGRES_USER/PASSWORD, BACKEND_IMAGE, FRONTEND_IMAGE
+#   .env          rendered from deploy/compose.env.example -- COMPOSE_FILE,
+#                 POSTGRES_*, CRM_DB_*, BACKEND_IMAGE, FRONTEND_IMAGE
 #   docker-compose.prod.yml, postgres-init/, proxy-templates/
 #
 # This box PULLS images and never builds them: it is small, it stops nightly,
@@ -19,7 +20,27 @@ CERTBOT_EMAIL="${3:?missing certbot email}"
 STACK_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$STACK_DIR"
 
-COMPOSE=(docker compose --env-file stack.env -f docker-compose.prod.yml)
+# Every compose command below is bare, because .env -- Compose's own default
+# env file -- carries COMPOSE_FILE along with the values the compose file
+# interpolates. So is the command a human types in ~/stack when something needs
+# looking at. That is the point: one invocation, no flags to remember, and no
+# way for the deploy path and the debugging path to drift apart.
+#
+# Checked rather than assumed. Without .env, Compose finds no configuration
+# file at all; with a partial one it interpolates the missing values to blank
+# strings and only warns, which is the failure this project keeps having.
+if [ ! -f .env ]; then
+  echo "ERROR: ${STACK_DIR}/.env is missing -- CI renders it from deploy/compose.env.example" >&2
+  exit 1
+fi
+chmod 600 .env
+
+# Left over from before .env: stack.env was the old --env-file, and scp does
+# not delete what CI has stopped sending. A stale second copy of the same
+# credentials is worth removing rather than leaving to be found later.
+rm -f stack.env
+
+COMPOSE=(docker compose)
 
 # --- 1. Render the proxy config -------------------------------------------
 #

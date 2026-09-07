@@ -51,7 +51,7 @@ Push to main/staging          Manual run (Actions tab)
       │                              │
       ▼                              ▼
   [build] ──────────────────────▶ [deploy]
-  render-env asserts config      render backend.env + stack.env
+  render-env asserts config      render backend.env + .env
   build backend image            scp the stack to the box
   build frontend image           bootstrap.sh          ← own ssh session
   push both to GHCR, tagged      docker login ghcr.io (read-only token)
@@ -278,7 +278,7 @@ certificate for that name yet, and does not need one under Flexible).
 stopped and disabled, so recovery is
 
 ```bash
-cd ~/stack && docker compose --env-file stack.env -f docker-compose.prod.yml down
+cd ~/stack && docker compose down
 sudo systemctl enable --now nginx ticketing-backend
 ```
 

@@ -88,7 +88,22 @@ jobs:
         env:
           # EVERY key in backend/.env.example must appear here, or the build
           # fails. See render-env.sh for why that matters on this project.
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          # DATABASE_URL is BUILT from the same two secrets that create the
+          # database, never stored as a URL of its own. It used to be
+          # secrets.DATABASE_URL_TEST, which carried a second copy of the role
+          # and password that POSTGRES_USER_TEST/POSTGRES_PASSWORD_TEST already
+          # supply -- and two copies of one credential duly drifted apart. The
+          # stored URL still said `localhost` months after the database moved
+          # into a container, and still named a role the volume did not have;
+          # nothing could compare them because only one of the two was ever
+          # read by the app. Derived here, they cannot disagree.
+          #
+          # The host is `postgres`, the compose service name, resolved on the
+          # compose network. It is a fact about the topology rather than a
+          # secret, so it belongs in the open where a reviewer can see it --
+          # being hidden inside a secret is precisely how `localhost` survived
+          # the move off bare metal.
+          DATABASE_URL: postgresql://${{ secrets.POSTGRES_USER_TEST }}:${{ secrets.POSTGRES_PASSWORD_TEST }}@postgres:5432/ticketing_saas
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           CLERK_FRONTEND_API: ${{ secrets.CLERK_FRONTEND_API }}
           ENVIRONMENT: test
@@ -96,20 +111,40 @@ jobs:
           MANAGER_EMAIL: ${{ vars.MANAGER_EMAIL }}
         run: ./deploy/render-env.sh backend/.env.example > /tmp/backend.env
 
+      - name: Render the compose .env
+        env:
+          # The same contract as backend.env above: every key in the template
+          # must have a non-empty value here, or the build fails naming the
+          # ones that do not.
+          #
+          # This replaces a fixed heredoc, and the heredoc is how CRM_DB_USER
+          # reached the test box as an empty string -- the GitHub variable was
+          # never set, the heredoc wrote `CRM_DB_USER=` regardless, and nothing
+          # reported it. Postgres reads that value exactly once, on a first `up`
+          # against an empty volume, so prod gets a single chance at it: at
+          # cutover, with no way to notice afterwards that it was blank.
+          #
+          # COMPOSE_FILE travels in this file so a bare `docker compose` in
+          # ~/stack finds the stack. See deploy/compose.env.example.
+          COMPOSE_FILE: docker-compose.prod.yml
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER_TEST }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD_TEST }}
+          CRM_DB_USER: ${{ vars.CRM_DB_USER_TEST }}
+          CRM_DB_PASSWORD: ${{ secrets.CRM_DB_PASSWORD_TEST }}
+          BACKEND_IMAGE: ${{ needs.build.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.build.outputs.frontend_image }}
+        run: ./deploy/render-env.sh deploy/compose.env.example > /tmp/compose.env
+
       - name: Assemble the stack directory
         run: |
           mkdir -p /tmp/stack
           cp -r deploy/. /tmp/stack/
           cp -r proxy/deploy/conf.d /tmp/stack/proxy-templates
           mv /tmp/backend.env /tmp/stack/backend.env
-          cat > /tmp/stack/stack.env <<EOF
-          POSTGRES_USER=${{ secrets.POSTGRES_USER_TEST }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD_TEST }}
-          CRM_DB_USER=${{ vars.CRM_DB_USER_TEST }}
-          CRM_DB_PASSWORD=${{ secrets.CRM_DB_PASSWORD_TEST }}
-          BACKEND_IMAGE=${{ needs.build.outputs.backend_image }}
-          FRONTEND_IMAGE=${{ needs.build.outputs.frontend_image }}
-          EOF
+          # Compose reads .env by default, which is what lets deploy.sh and a
+          # human in ~/stack run the identical bare `docker compose`.
+          mv /tmp/compose.env /tmp/stack/.env
+          chmod 600 /tmp/stack/backend.env /tmp/stack/.env
           chmod +x /tmp/stack/*.sh /tmp/stack/postgres-init/*.sh
 
       - name: Set up SSH
