@@ -51,7 +51,7 @@ Push to main/staging          Manual run (Actions tab)
       │                              │
       ▼                              ▼
   [build] ──────────────────────▶ [deploy]
-  render-env asserts config      render backend.env + stack.env
+  render-env asserts config      render backend.env + .env
   build backend image            scp the stack to the box
   build frontend image           bootstrap.sh          ← own ssh session
   push both to GHCR, tagged      docker login ghcr.io (read-only token)
@@ -205,7 +205,37 @@ keep the branch open until you are ready.
       together, so the backend's migration on first boot is the no-op it
       should be. Let the backend start first instead and it builds an empty
       schema that the restore then collides with.
-   4. Run the deploy for real, and verify row counts.
+   4. **Edit `DATABASE_URL_<ENV>` now, and not before.** Two things in it are
+      wrong for a containerized box, and each breaks differently:
+
+      ```
+      postgresql://<POSTGRES_USER_x>:<POSTGRES_PASSWORD_x>@postgres:5432/ticketing_saas
+                   ^^^^^^^^^^^^^^^^^^ must exist as a ROLE   ^^^^^^^^ not localhost
+      ```
+
+      **Host.** Bare metal reads `localhost`, which inside the backend
+      container is the container itself — the backend crash-loops on
+      "connection refused". It must be `postgres`, the compose service name.
+
+      **Role.** `POSTGRES_USER_x` only takes effect on the FIRST `up` against
+      an empty volume. If the volume was ever initialised with a different
+      name, that name is what the database has, and this URL must match it or
+      nothing authenticates. Check rather than assume:
+      `docker exec maxcpa-postgres-1 psql -U <user> -d ticketing_saas -c '\du'`
+
+      Both of these hit test on 2026-09-06: the secret still said
+      `localhost`, and the role was `ticketing` where the secret expected
+      `ticketing_test`. The deploy reported success; the backend restarted in
+      a loop behind it.
+
+      **Not before.** Until the box is containerized this secret is correct as
+      it stands — the bare-metal backend really does reach Postgres on
+      localhost. Editing it early writes an unreachable host into a live
+      `.env` at the next deploy.
+   5. Run the deploy for real, and verify row counts. Check
+      `docker compose ps` shows the backend `Up`, not `Restarting` — a
+      crash-looping backend still leaves the other three services healthy and
+      the deploy green.
 4. **Stop and start the instance** and confirm every container comes back, and
    that `nginx` and `ticketing-backend` are still `inactive / disabled`. This is
    the thing that actually breaks nightly, and it is the whole reason test
@@ -248,7 +278,7 @@ certificate for that name yet, and does not need one under Flexible).
 stopped and disabled, so recovery is
 
 ```bash
-cd ~/stack && docker compose --env-file stack.env -f docker-compose.prod.yml down
+cd ~/stack && docker compose down
 sudo systemctl enable --now nginx ticketing-backend
 ```
 
@@ -262,6 +292,47 @@ bare-metal copy.
 ---
 
 ## GitHub Actions secrets and variables
+
+### Where they live, and why every job names an environment
+
+Everything per-environment sits inside a GitHub **Environment** (`test` /
+`prod`); only the values shared by both stay at repository level:
+
+```
+repository level    EC2_USER  CERTBOT_EMAIL  ADMIN_EMAIL  MANAGER_EMAIL
+                    EC2_SSH_KEY  GHCR_PULL_TOKEN  AWS_* (bare metal only)
+
+environment test    EC2_HOST_TEST  TEST_DOMAIN  VITE_*  S3_BUCKET_TEST
+                    DATABASE_URL_TEST  CLERK_*  POSTGRES_*_TEST  CRM_DB_*_TEST
+
+environment prod    the same, PROD-suffixed
+```
+
+**A job sees an environment's values only if it declares that environment.**
+Without it they resolve to an empty string — no error, no warning:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: test        # ← required, on EVERY job that reads config
+```
+
+This is not theoretical. On 2026-09-06 a prod deploy ran with none of them
+declared and executed `aws s3 sync frontend/dist/ s3:// --delete` and
+`scp backend.env ubuntu@:` — writing a `.env` whose `DATABASE_URL` and
+`CLERK_SECRET_KEY` were blank. It failed only because the empty hostname made
+`scp` unresolvable. Had `EC2_HOST_PROD` been set, that file would have landed
+on prod and the service would have come up broken at its next 07:00 start,
+with a green deploy hours behind it.
+
+**The build jobs need it as much as the deploy jobs.** They read
+`VITE_CLERK_PUBLISHABLE_KEY`, which Vite inlines at build time — miss it and
+the build stays green while publishing an image nobody can log into.
+
+Adding `environment:` also makes those jobs subject to that environment's
+protection rules. Useful for prod (required reviewers), but a deploy will then
+sit waiting for approval rather than running.
 
 **Secrets:**
 
