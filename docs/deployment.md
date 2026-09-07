@@ -25,15 +25,15 @@ not a drift to correct.
 
 ### Topology
 
-One EC2 box, one Docker network, one compose project (`maxcpa`) that will hold
-both this app and the CRM:
+One EC2 box, one Docker network, one compose project (`ticketing`) holding this
+app and nothing else:
 
 ```
 Cloudflare ──▶ proxy (nginx container, :80/:443)
-                 ├── /api  ──▶ ticketing-backend  (FastAPI)
-                 └── /     ──▶ ticketing-frontend (nginx serving the built SPA)
+                 ├── /api  ──▶ backend  (FastAPI)
+                 └── /     ──▶ frontend (nginx serving the built SPA)
                                     │
-                              postgres (shared: ticketing_saas + crm)
+                              postgres (ticketing_saas)
 ```
 
 **Same origin.** One hostname serves the SPA and the API. That is why the
@@ -41,8 +41,19 @@ backend has no CORS middleware and the bundle has no API base URL — there is n
 second origin for either to describe. It also means the whole zone can run
 Cloudflare Full SSL, with no per-hostname Flexible override for an S3 bucket.
 
-Service names carry a `ticketing-` prefix because the CRM's containers join the
-same network, where a bare `backend` would collide.
+**The CRM is not in this project.** Until 2026-09-07 this file described one
+compose project named `maxcpa` — after the box, not the app — holding both
+apps behind one proxy and one Postgres, with services prefixed `ticketing-` so
+a bare `backend` would not collide with the CRM's own. That is why older
+commits, and the `maxcpa` names still on the test box, look the way they do.
+The CRM now deploys as its own compose project with its own Postgres and its
+own nginx, so the prefix was dropped and the project renamed to `ticketing`.
+
+Only one container can bind the host's `:80` and `:443`, and this proxy holds
+both; a second stack on the same box publishes its entry point on another port.
+The merge is deferred rather than cancelled — if it happens, `backend` and
+`frontend` are DNS aliases on a shared network and the CRM uses the same two
+names, so one side must be prefixed again.
 
 ### The pipeline
 
@@ -140,6 +151,12 @@ read-only. Two things had to change when nginx moved into a container:
   wrong and the certificate renews on disk while the proxy serves the expired
   one until it fails.
 
+  The filename still says `maxcpa` deliberately. Certbot stores the hook path
+  in each certificate's renewal config at issuance, and a renewal months later
+  runs whatever path was stored then, so renaming the file would strand every
+  existing certificate. The path is the stable part; what changed with the
+  project rename is the container filter *inside* it, now `ticketing-proxy`.
+
 The SSL server blocks are installed only once the certificates exist. nginx
 refuses to start when a `ssl_certificate` file is missing, but certbot's
 challenge needs a running nginx — `deploy.sh` breaks that circle by bringing
@@ -172,9 +189,11 @@ HTTP-only phase.
 `:443` and returns `444` to anything whose `Host` matches no server block —
 scanners probing the bare Elastic IP, which bypasses Cloudflare entirely.
 
-nginx **refuses to start with two `default_server` blocks**. The CRM's
-`proxy/conf.d/crm.conf` currently claims `listen 80 default_server` for local
-development; that keyword must be dropped when its block joins this proxy.
+nginx **refuses to start with two `default_server` blocks**. Nothing else
+claims it today: the CRM runs its own nginx in its own compose project, so its
+`listen 80 default_server` is alone in its own container. Both that keyword and
+the `_` in its `server_name` would have to go if the two are ever merged behind
+this proxy.
 
 ---
 
@@ -221,7 +240,7 @@ keep the branch open until you are ready.
       an empty volume. If the volume was ever initialised with a different
       name, that name is what the database has, and this URL must match it or
       nothing authenticates. Check rather than assume:
-      `docker exec maxcpa-postgres-1 psql -U <user> -d ticketing_saas -c '\du'`
+      `docker exec ticketing-postgres-1 psql -U <user> -d ticketing_saas -c '\du'`
 
       Both of these hit test on 2026-09-06: the secret still said
       `localhost`, and the role was `ticketing` where the secret expected
@@ -303,7 +322,7 @@ repository level    EC2_USER  CERTBOT_EMAIL  ADMIN_EMAIL  MANAGER_EMAIL
                     EC2_SSH_KEY  GHCR_PULL_TOKEN  AWS_* (bare metal only)
 
 environment test    EC2_HOST_TEST  TEST_DOMAIN  VITE_*  S3_BUCKET_TEST
-                    DATABASE_URL_TEST  CLERK_*  POSTGRES_*_TEST  CRM_DB_*_TEST
+                    CLERK_*  POSTGRES_*_TEST
 
 environment prod    the same, PROD-suffixed
 ```
@@ -339,12 +358,10 @@ sit waiting for approval rather than running.
 ```
 EC2_SSH_KEY
 GHCR_PULL_TOKEN            read-only package token used by the box
-DATABASE_URL_TEST          DATABASE_URL_PROD
 CLERK_SECRET_KEY           PROD_CLERK_SECRET_KEY
 CLERK_FRONTEND_API         PROD_CLERK_FRONTEND_API
 POSTGRES_USER_TEST         POSTGRES_USER_PROD
 POSTGRES_PASSWORD_TEST     POSTGRES_PASSWORD_PROD
-CRM_DB_PASSWORD_TEST       CRM_DB_PASSWORD_PROD
 ```
 
 **Variables:**
@@ -355,34 +372,43 @@ EC2_HOST_TEST              EC2_HOST_PROD
 TEST_DOMAIN                PROD_DOMAIN        the app's own hostname
 VITE_API_URL               PROD_API_URL       legacy API hostname, still served
 VITE_CLERK_PUBLISHABLE_KEY PROD_CLERK_PUBLISHABLE_KEY
-CRM_DB_USER_TEST           CRM_DB_USER_PROD   the CRM's role, per environment
 ADMIN_EMAIL                MANAGER_EMAIL
 CERTBOT_EMAIL
 ```
 
-### The CRM's database role, and its one chance
+### `DATABASE_URL` is derived, not stored
 
-The database is `crm` on every box — isolation is per instance, exactly as
-`ticketing_saas` is the same name on test and prod. What carries the
-environment is the OWNER: `crm_dev` / `crm_test` / `crm_prod`, mirroring
-`ticketing_dev` / `ticketing_test` / `ticketing_prod`. A credential is then
-obviously one environment's when it shows up in a log or a config file.
+There is deliberately no `DATABASE_URL_*` secret. The workflow builds it from
+`POSTGRES_USER_*` and `POSTGRES_PASSWORD_*` — the same values the database is
+created with — so the credentials the app connects with cannot drift from the
+ones that exist. A stored URL did drift: it still said `localhost` long after
+the database moved into a container, and named a role the volume did not have,
+because only one of the two copies was ever read.
 
-`CRM_DB_USER_*` and `CRM_DB_PASSWORD_*` are read by
-`postgres-init/01-create-crm-database.sh`, which Postgres runs **once**, on the
-first `up` against an empty volume, and never again. Changing either variable
-afterwards does nothing at all — no error, no re-read. Correcting a name or
-password later means `ALTER ROLE` by hand on the box.
+The host (`postgres`, the compose service name) and database (`ticketing_saas`)
+are facts about the topology rather than secrets, and sit in the open in the
+workflow where a reviewer can see them. Hiding them inside a secret is exactly
+how `localhost` survived the move off bare metal unnoticed.
 
-**Prod gets exactly one chance, at cutover.** Set both before the deploy that
-first brings up the stack there.
+One constraint this creates: **the password is spliced into a URL**, so it must
+avoid characters with meaning in one — `@`, `:`, `/`, `?`, `#`, `%`. Stick to
+`A-Z a-z 0-9 . _ ~ -` when rotating.
 
-Both must also be listed in the postgres service's `environment:` block to
-exist inside the container. An `--env-file` supplies values for interpolation
-in the compose file; it puts nothing into the container. They were missing
-there until 2026-09-06, so the script fell through to its `crm`/`crm` defaults
-whatever the workflow had been told — and an init script that "worked" leaves
-nothing to notice.
+### Removed: the CRM's database role
+
+`CRM_DB_USER_*` and `CRM_DB_PASSWORD_*` are gone, along with
+`postgres-init/01-create-crm-database.sh`. They existed to create a `crm`
+database and role inside this stack's Postgres, back when the CRM was going to
+share it. As of 2026-09-07 the CRM runs its own Postgres in its own compose
+project, so this stack creates nothing but its own database.
+
+If the two are ever merged, note what made those variables fragile: Postgres
+reads an init script **once**, on the first `up` against an empty volume, and
+never again. A wrong or empty value could not be corrected by changing the
+variable — only by `ALTER ROLE` on the box — and an init script that "worked"
+left nothing to notice. The `crm` database and `crm_test` role that arrangement
+had already created on the test box were dropped by hand on 2026-09-07; prod
+never had them, since its volume is not initialised until cutover.
 
 `TEST_DOMAIN` / `PROD_DOMAIN` are new: with one origin, the app's hostname is
 no longer derivable from the API URL. `VITE_API_URL` / `PROD_API_URL` are kept

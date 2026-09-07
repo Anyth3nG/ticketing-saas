@@ -127,20 +127,18 @@ jobs:
           # must have a non-empty value here, or the build fails naming the
           # ones that do not.
           #
-          # This replaces a fixed heredoc, and the heredoc is how CRM_DB_USER
-          # reached the test box as an empty string -- the GitHub variable was
-          # never set, the heredoc wrote `CRM_DB_USER=` regardless, and nothing
-          # reported it. Postgres reads that value exactly once, on a first `up`
-          # against an empty volume, so prod gets a single chance at it: at
-          # cutover, with no way to notice afterwards that it was blank.
+          # This replaces a fixed heredoc, which is how the now-removed
+          # CRM_DB_USER once reached the test box as an empty string -- the
+          # GitHub variable was never set, the heredoc wrote `CRM_DB_USER=`
+          # regardless, and nothing reported it. Postgres reads values like
+          # that exactly once, on a first `up` against an empty volume, so
+          # there is no second chance to notice.
           #
           # COMPOSE_FILE travels in this file so a bare `docker compose` in
           # ~/stack finds the stack. See deploy/compose.env.example.
           COMPOSE_FILE: docker-compose.prod.yml
           POSTGRES_USER: ${{ secrets.POSTGRES_USER_PROD }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD_PROD }}
-          CRM_DB_USER: ${{ vars.CRM_DB_USER_PROD }}
-          CRM_DB_PASSWORD: ${{ secrets.CRM_DB_PASSWORD_PROD }}
           BACKEND_IMAGE: ${{ needs.build.outputs.backend_image }}
           FRONTEND_IMAGE: ${{ needs.build.outputs.frontend_image }}
         run: ./deploy/render-env.sh deploy/compose.env.example > /tmp/compose.env
@@ -157,7 +155,7 @@ jobs:
           # human in ~/stack run the identical bare `docker compose`.
           mv /tmp/compose.env /tmp/stack/.env
           chmod 600 /tmp/stack/backend.env /tmp/stack/.env
-          chmod +x /tmp/stack/*.sh /tmp/stack/postgres-init/*.sh
+          chmod +x /tmp/stack/*.sh
 
       - name: Set up SSH
         run: |

@@ -6,12 +6,22 @@
 # Lives alongside a rendered backend.env and a rendered proxy conf.d, both
 # produced by CI and copied over. See deploy.sh.
 #
-# THE CRM JOINS THIS FILE. When the CRM is deployed, its backend and frontend
-# services are added here rather than to a compose project of their own: they
-# need the same Postgres engine and the same proxy, and one file means one
-# `docker compose up -d` and one network with no external-network wiring.
+# TICKETING ONLY, AND THE NAME SAYS SO. This file used to reserve a place for
+# the CRM -- same Postgres engine, same proxy, one compose project -- and was
+# named `maxcpa` after the box rather than the app for exactly that reason.
+# Decided 2026-09-07 that the CRM gets its own compose project, with its own
+# Postgres and its own nginx, so the name now describes what actually runs.
+#
+# Only one container can bind the host's :80 and :443, and this proxy holds
+# both. A second stack on this box publishes its entry point on another port
+# (loopback-only unless it is meant to be public).
+#
+# IF THE TWO ARE EVER MERGED behind one proxy, note that `backend` and
+# `frontend` below are service names, and service names are DNS aliases on a
+# shared network. The CRM uses those same two names, so one side has to be
+# prefixed before either can resolve the other.
 
-name: maxcpa
+name: ticketing
 
 services:
   postgres:
@@ -20,31 +30,22 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ticketing_saas
-      # Read ONLY by postgres-init/01-create-crm-database.sh, and only on the
-      # first `up` against an empty volume.
-      #
-      # These have to be listed here to exist at all. An --env-file supplies
-      # values for interpolation IN THIS FILE; it does not put anything inside
-      # the container. Without these two lines the init script saw neither,
-      # fell through to its defaults, and created the CRM role as crm/crm no
-      # matter what the workflow had been told -- silently, since an init
-      # script that "worked" leaves nothing to notice.
-      CRM_DB_USER: ${CRM_DB_USER}
-      CRM_DB_PASSWORD: ${CRM_DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Runs ONCE, on an empty data directory only. It creates the CRM's
-      # database alongside this one so that adding the CRM later does not
-      # require re-initialising a volume that by then holds live data.
-      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
+      # THIS DOES NOT CHECK CREDENTIALS. pg_isready never authenticates -- it
+      # only asks whether the server is accepting connections, and reports
+      # healthy against a role that does not exist. A wrong POSTGRES_USER went
+      # unnoticed for a day behind a green healthcheck while the backend
+      # crash-looped. Read this as "postgres is listening", never as "the
+      # credentials work".
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ticketing_saas"]
       interval: 10s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
-  ticketing-backend:
+  backend:
     image: ${BACKEND_IMAGE}
     env_file:
       - backend.env
@@ -53,12 +54,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  ticketing-frontend:
+  frontend:
     # The Clerk publishable key is already baked into this image; there is
     # nothing to configure at runtime.
     image: ${FRONTEND_IMAGE}
     depends_on:
-      - ticketing-backend
+      - backend
     restart: unless-stopped
 
   proxy:
@@ -77,8 +78,8 @@ services:
       # writes challenge files into this directory and nginx serves them.
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
-      - ticketing-backend
-      - ticketing-frontend
+      - backend
+      - frontend
     restart: unless-stopped
 
 volumes:

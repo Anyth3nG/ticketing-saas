@@ -28,6 +28,14 @@ API_DOMAIN="${2:?missing api domain}"
 EMAIL="${3:?missing email}"
 
 WEBROOT=/var/www/certbot
+
+# THE PATH STAYS `maxcpa` ON PURPOSE, even though the compose project is now
+# `ticketing`. Certbot stored this path in every existing certificate's renewal
+# config at issuance time, and a renewal weeks from now runs whatever path was
+# stored then. Renaming the file would leave those configs pointing at nothing,
+# which is the silent failure this indirection exists to avoid: the certificate
+# renews on disk while the proxy serves the expired one. The contents are what
+# gets corrected -- see the container filter in the hook below.
 HOOK=/usr/local/bin/reload-maxcpa-proxy
 
 command -v certbot >/dev/null 2>&1 || {
@@ -48,10 +56,14 @@ cat > "$HOOK" <<'HOOKEOF'
 #!/usr/bin/env bash
 # Reload the proxy CONTAINER after a certificate renews. Not host nginx --
 # there isn't one.
+#
+# The filter tracks the COMPOSE PROJECT NAME, which is `ticketing` (it was
+# `maxcpa` until 2026-09-07, when the CRM stopped sharing this stack). Rename
+# the project again and this line has to move with it, or renewal goes quiet.
 set -euo pipefail
-cid="$(docker ps -q --filter 'name=maxcpa-proxy' | head -1)"
+cid="$(docker ps -q --filter 'name=ticketing-proxy' | head -1)"
 if [ -z "$cid" ]; then
-  echo "reload-maxcpa-proxy: no running proxy container found" >&2
+  echo "reload-ticketing-proxy: no running proxy container found" >&2
   exit 1
 fi
 docker exec "$cid" nginx -s reload

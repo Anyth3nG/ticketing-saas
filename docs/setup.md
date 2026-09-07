@@ -19,8 +19,8 @@ whatever is in `backend/.env` for it is ignored locally. Migrations run on
 backend start.
 
 ```bash
-docker compose exec ticketing-backend pytest      # tests, inside the image
-docker compose logs -f ticketing-backend          # follow the backend
+docker compose exec backend pytest      # tests, inside the image
+docker compose logs -f backend          # follow the backend
 docker compose down -v                            # stop, discarding the database
 ```
 

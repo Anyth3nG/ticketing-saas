@@ -5,8 +5,8 @@
 # Expects, already copied into $STACK_DIR by the workflow:
 #   backend.env   rendered from backend/.env.example (see render-env.sh)
 #   .env          rendered from deploy/compose.env.example -- COMPOSE_FILE,
-#                 POSTGRES_*, CRM_DB_*, BACKEND_IMAGE, FRONTEND_IMAGE
-#   docker-compose.prod.yml, postgres-init/, proxy-templates/
+#                 POSTGRES_*, BACKEND_IMAGE, FRONTEND_IMAGE
+#   docker-compose.prod.yml, proxy-templates/
 #
 # This box PULLS images and never builds them: it is small, it stops nightly,
 # and a build here would be a second place for the result to differ from what
