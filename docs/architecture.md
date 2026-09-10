@@ -37,7 +37,7 @@ User's Browser
 
 | Domain | Points to | Notes |
 |---|---|---|
-| `testing.max-cpa.co.il` | Test EC2 Elastic IP | **This app on test**, containerized and same origin (SPA + `/api`), since 2026-09-10. Until then it was the S3 test bucket, which is why that bucket is named `testing.max-cpa.co.il` — S3 website hosting matches the bucket name to the `Host` header |
+| `testing.max-cpa.co.il` | Test EC2 Elastic IP | **This app on test**, containerized and same origin (SPA + `/api`), since 2026-09-10. Until then it pointed at an S3 test bucket named to match (S3 website hosting matches the bucket name to the `Host` header); that bucket was deleted on 2026-09-10 |
 | `workload.max-cpa.co.il` | S3 website endpoint (prod bucket) | Same constraint — bucket named `workload.max-cpa.co.il` |
 | `api-testing.max-cpa.co.il` | Test EC2 Elastic IP | **The CRM on test** since 2026-09-10 — this app's proxy hands it across to the CRM's own stack (see [deployment.md](deployment.md)). Before that it was this app's test API. Deliberately 1 level under the apex — Cloudflare's free Universal SSL only covers the apex + one wildcard level (`*.max-cpa.co.il`), not 2-level subdomains like `api.testing.max-cpa.co.il` |
 | `api-workload.max-cpa.co.il` | Prod EC2 Elastic IP | Same reason |
