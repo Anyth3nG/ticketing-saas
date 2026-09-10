@@ -111,7 +111,10 @@ export default function Navbar() {
         </button>
       )}
       <NotificationBell role={role} />
-      <UserButton />
+      {/* Switching account lands on "/" on THIS hostname, where RoleRedirect
+          picks the new user's dashboard. Unset, Clerk uses the absolute URL
+          saved in its dashboard, which on test points at the CRM. */}
+      <UserButton afterSwitchSessionUrl="/" />
 
       {showLayoutEditor &&
         createPortal(
