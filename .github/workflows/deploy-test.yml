@@ -30,6 +30,11 @@ jobs:
     # publishable key, which Vite inlines at build time. Miss it here and
     # the build stays green while shipping a bundle nobody can log into.
     environment: test
+    # The CRM's test address, for the navbar link that opens it signed in (see
+    # frontend/.env.example). A literal, like the CRM hostname in the deploy
+    # job below. The assert step reads it from here too.
+    env:
+      VITE_CRM_URL: https://api-testing.max-cpa.co.il
     permissions:
       contents: read
       packages: write
@@ -73,6 +78,7 @@ jobs:
           tags: ${{ steps.meta.outputs.frontend_image }}
           build-args: |
             VITE_CLERK_PUBLISHABLE_KEY=${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+            VITE_CRM_URL=${{ env.VITE_CRM_URL }}
 
   deploy:
     name: Deploy to test

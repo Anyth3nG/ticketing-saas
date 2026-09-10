@@ -19,6 +19,10 @@ COPY . .
 ARG VITE_CLERK_PUBLISHABLE_KEY=""
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 
+# Optional: empty hides the navbar's link to the CRM. See .env.example.
+ARG VITE_CRM_URL=""
+ENV VITE_CRM_URL=$VITE_CRM_URL
+
 RUN npm run build
 
 # ---- serve ----------------------------------------------------------------

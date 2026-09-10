@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAuth, useUser, UserButton } from "@clerk/react";
+import { useAuth, useClerk, useUser, UserButton } from "@clerk/react";
 import { Link, useLocation } from "react-router-dom";
 import { getCurrentUser, getUsers } from "../api/users";
 import { applyDashboardOrder } from "../utils/format";
@@ -10,6 +10,12 @@ import { GridIcon } from "./icons";
 
 const DASHBOARD_PATHS = ["/", "/worker", "/manager"];
 
+// The CRM, opened with the same user still signed in. Empty wherever the CRM
+// does not run (prod, for now), which hides the link. Trimmed because Vite
+// pastes the build variable in verbatim -- see api/config.js for what a stray
+// newline in one once did.
+const CRM_URL = import.meta.env.VITE_CRM_URL?.trim();
+
 // Whether the "view the manager's work page" link is drawn comes from the user
 // object's `is_admin`, decided server-side (backend/custom_board.py). The route
 // itself is what actually enforces access; this only hides a link that would
@@ -18,6 +24,7 @@ const DASHBOARD_PATHS = ["/", "/worker", "/manager"];
 export default function Navbar() {
   const { user } = useUser();
   const { getToken } = useAuth();
+  const clerk = useClerk();
   const { pathname } = useLocation();
   const [role, setRole] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -59,6 +66,20 @@ export default function Navbar() {
     setShowLayoutEditor(true);
   }
 
+  // The href is the bare URL; the click adds the session. On Clerk's
+  // development instance (test) a session cannot cross hostnames by cookie, so
+  // buildUrlWithAuth appends Clerk's dev-browser token, which the CRM reads and
+  // strips from the URL on arrival. On production it returns the URL
+  // unchanged: the session lives with Clerk under max-cpa.co.il, not per app.
+  // Built on click rather than into the href, so the token never sits in the
+  // page to be copied. A modified or middle click keeps the browser's own
+  // behaviour and opens the bare URL.
+  function openCrm(event) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    window.location.assign(clerk.buildUrlWithAuth(CRM_URL));
+  }
+
   function handleLayoutSaved(newOrder) {
     setDashboardLayout(newOrder);
     setShowLayoutEditor(false);
@@ -97,6 +118,11 @@ export default function Navbar() {
         >
           Yulia&rsquo;s Work
         </Link>
+      )}
+      {CRM_URL && (
+        <a className="navbar-link" href={CRM_URL} onClick={openCrm}>
+          CRM
+        </a>
       )}
       <span className="navbar-user">{name}</span>
       {role === "manager" && (

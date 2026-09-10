@@ -56,6 +56,8 @@ services:
       args:
         # Baked into the bundle at BUILD time, not read at container start.
         VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+        # Empty hides the link to the CRM.
+        VITE_CRM_URL: ${VITE_CRM_URL:-}
     depends_on:
       - backend
     restart: unless-stopped

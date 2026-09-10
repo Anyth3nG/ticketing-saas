@@ -113,6 +113,22 @@ changed. See [decisions.md](decisions.md).
 Not covered: signing out of one of several accounts still passes through
 Clerk's hosted "choose account" page.
 
+### Switching to the CRM
+
+The navbar's **CRM** link opens the CRM with the same person still signed in —
+both apps use the same Clerk instance, so it is one session rather than a
+second login. On test the two hostnames cannot share Clerk's cookie (a
+development instance lives on Clerk's own domain), so the click goes through
+`clerk.buildUrlWithAuth()`, which appends Clerk's dev-browser token for the CRM
+to pick up and strip from the URL. On production it returns the URL unchanged.
+The token is added on click rather than written into the `href`, so it is never
+on the page to be copied.
+
+The CRM's address is `VITE_CRM_URL`, a literal in each deploy workflow. Empty
+hides the link — the case on prod until the CRM runs there. Each app still
+applies its own roles; the link only saves signing in twice. The CRM has the
+matching link back.
+
 ## CI/CD
 
 See [deployment.md](deployment.md) for full pipeline details.
