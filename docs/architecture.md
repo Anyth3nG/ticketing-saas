@@ -37,10 +37,11 @@ User's Browser
 
 | Domain | Points to | Notes |
 |---|---|---|
-| `testing.max-cpa.co.il` | S3 website endpoint (test bucket) | CNAME target must be the bucket's own endpoint — S3 website hosting matches the bucket name to the `Host` header, so the bucket is named `testing.max-cpa.co.il` |
+| `testing.max-cpa.co.il` | Test EC2 Elastic IP | **This app on test**, containerized and same origin (SPA + `/api`), since 2026-09-10. Until then it was the S3 test bucket, which is why that bucket is named `testing.max-cpa.co.il` — S3 website hosting matches the bucket name to the `Host` header |
 | `workload.max-cpa.co.il` | S3 website endpoint (prod bucket) | Same constraint — bucket named `workload.max-cpa.co.il` |
-| `api-testing.max-cpa.co.il` | Test EC2 Elastic IP | Deliberately 1 level under the apex — Cloudflare's free Universal SSL only covers the apex + one wildcard level (`*.max-cpa.co.il`), not 2-level subdomains like `api.testing.max-cpa.co.il` |
+| `api-testing.max-cpa.co.il` | Test EC2 Elastic IP | **The CRM on test** since 2026-09-10 — this app's proxy hands it across to the CRM's own stack (see [deployment.md](deployment.md)). Before that it was this app's test API. Deliberately 1 level under the apex — Cloudflare's free Universal SSL only covers the apex + one wildcard level (`*.max-cpa.co.il`), not 2-level subdomains like `api.testing.max-cpa.co.il` |
 | `api-workload.max-cpa.co.il` | Prod EC2 Elastic IP | Same reason |
+| `crm.max-cpa.co.il` | Prod EC2 Elastic IP | The CRM's planned prod hostname. Nothing serves it yet, and nothing in this repo configures it |
 | `clerk.max-cpa.co.il` | `frontend-api.clerk.services` | **DNS-only** (grey-cloud), not proxied — Clerk terminates its own TLS and verifies domain ownership directly against this CNAME; Cloudflare proxying breaks both |
 
 SSL: Cloudflare terminates HTTPS at the edge for every record (Universal SSL, free tier). For the two `api-*` records, Cloudflare also connects onward to the EC2 origin over HTTPS using a Let's Encrypt cert provisioned by `backend/deploy/setup_nginx_tls.sh` (see [deployment.md](deployment.md)) — but the origin's Nginx config intentionally serves identically on port 80 and port 443 (no forced redirect), so it works correctly regardless of whether Cloudflare's SSL/TLS mode for that hostname is set to Flexible or Full.
@@ -87,6 +88,47 @@ Clerk instance switch), inheriting that row's role. That's only safe because sig
 disabled — nobody can present a token for an email they weren't personally given one for. If
 self-serve sign-up were ever enabled, this becomes a privilege-escalation path.
 
+### Where sign-in happens
+
+The sign-in form is Clerk's, drawn inside this app's own page: `main.jsx` mounts
+`<SignIn>` at `/sign-in`, Clerk's script renders it, and the credentials go by
+`fetch` straight to Clerk. The app itself never redirects to sign in —
+`ProtectedRoute` changes the URL client-side.
+
+Two props keep Clerk's other flows on the same hostname:
+
+- `signInUrl="/sign-in"` on `ClerkProvider` — where the avatar menu's **Add
+  account** goes.
+- `afterSwitchSessionUrl="/"` on `UserButton` — where switching account lands.
+  Clerk reads this one only from `UserButton` or its dashboard, never from
+  `ClerkProvider`.
+
+Both are relative on purpose. Unset, Clerk falls back to its hosted sign-in
+page and to the absolute URLs saved in its dashboard — one set per Clerk
+instance. On test that instance is shared with the CRM and those URLs pointed
+at the CRM, so Add account landed people in the other app. A relative path
+follows whichever hostname the app is on, and never needs the dashboard
+changed. See [decisions.md](decisions.md).
+
+Not covered: signing out of one of several accounts still passes through
+Clerk's hosted "choose account" page.
+
+### Switching to the CRM
+
+The navbar's **CRM** link opens the CRM with the same person still signed in —
+both apps use the same Clerk instance, so it is one session rather than a
+second login. On test the two hostnames cannot share Clerk's cookie (a
+development instance lives on Clerk's own domain), so the click goes through
+`clerk.buildUrlWithAuth()`, which appends Clerk's dev-browser token for the CRM
+to pick up and strip from the URL. On production it returns the URL unchanged.
+The token is added on click rather than written into the `href`, so it is never
+on the page to be copied.
+
+The CRM's address is `VITE_CRM_URL`, a literal in each deploy workflow. Empty
+hides the link — the case on prod until the CRM runs there. Each app still
+applies its own roles; the link only saves signing in twice. The CRM has the
+matching link back.
+
 ## CI/CD
 
 See [deployment.md](deployment.md) for full pipeline details.
@@ -95,7 +137,10 @@ See [deployment.md](deployment.md) for full pipeline details.
 
 | | Dev | Test | Prod |
 |---|---|---|---|
-| Frontend | Nginx (local VM) | S3 (behind Cloudflare) | S3 (behind Cloudflare) |
-| Backend | FastAPI (local VM) | EC2 | EC2 |
-| Database | PostgreSQL (local VM) | PostgreSQL (EC2) | PostgreSQL (EC2) |
+| Frontend | Nginx (local VM) | container behind the proxy (EC2) | S3 (behind Cloudflare) |
+| Backend | FastAPI (local VM) | container (EC2) | EC2 |
+| Database | PostgreSQL (local VM) | container (EC2) | PostgreSQL (EC2) |
+
+Test runs the containerized deployment; prod is still on the bare-metal one
+described above until its cutover. See [deployment.md](deployment.md).
 | Git branch | feature branches | staging | main |
