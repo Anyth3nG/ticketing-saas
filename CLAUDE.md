@@ -8,7 +8,7 @@ Internal ticketing and work distribution SaaS for a small team of ~15 users. All
 
 - **Frontend**: React + Vite
 - **Backend**: Python + FastAPI
-- **Database**: PostgreSQL (a container on the EC2 box, shared with the CRM in a separate `crm` database)
+- **Database**: PostgreSQL (a container on the EC2 box, used only by this app — see the CRM note below)
 - **Auth**: Clerk — accounts are provisioned by hand (manager sets an initial password per user); self-serve sign-up is disabled, so no unknown accounts can be created
 - **Hosting**: Docker Compose on AWS EC2, behind an nginx proxy container. **Same origin** — one hostname serves the SPA and the API, so there is no CORS config and no API base URL in the bundle
 - **CI/CD**: GitHub Actions building images to GHCR; the box only pulls
@@ -17,6 +17,18 @@ Internal ticketing and work distribution SaaS for a small team of ~15 users. All
 > (systemd + host nginx + S3 frontend). See [docs/deployment.md](docs/deployment.md)
 > for both models and the cutover runbook — and read it before changing
 > anything under `deploy/` or `.github/workflows/`.
+
+> **The CRM is a separate stack.** `max-cpa-crm` is a different repository for
+> the same client, and as of 2026-09-07 it deploys as its own compose project
+> with its own Postgres and its own nginx. This repo's compose file used to
+> reserve a place for it — shared engine, shared proxy, project named `maxcpa`
+> after the box — and that is why older comments and docs mention it. Do not
+> reinstate that arrangement without asking; the merge is deferred, not
+> cancelled. Only one container can bind the host's `:80`/`:443`, and this
+> stack's proxy holds them, so a second stack publishes on loopback. On test
+> this proxy also forwards the CRM's hostname (`api-testing`) to the CRM's
+> proxy over the `max-cpa-edge` network (decided 2026-09-10) — that network is
+> the only thing the two stacks share. See docs/deployment.md.
 
 ## Repository Structure
 
