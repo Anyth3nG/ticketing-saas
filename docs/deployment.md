@@ -10,7 +10,7 @@ described here because both currently matter.
 | Status | **Live in prod today** | **Live on test** since 2026-09-04; prod not cut over |
 | Backend | venv + systemd `ticketing-backend` | container |
 | Frontend | S3 static website | container behind the proxy |
-| Postgres | on the instance | container, shared with the CRM |
+| Postgres | on the instance | container |
 | nginx | on the host, configured per deploy | container |
 | Origin | `workload` (S3) + `api-workload` (EC2) | one origin, `workload` |
 
@@ -49,11 +49,40 @@ commits, and the `maxcpa` names still on the test box, look the way they do.
 The CRM now deploys as its own compose project with its own Postgres and its
 own nginx, so the prefix was dropped and the project renamed to `ticketing`.
 
+### On test, the CRM's hostname passes through this proxy
+
 Only one container can bind the host's `:80` and `:443`, and this proxy holds
-both; a second stack on the same box publishes its entry point on another port.
-The merge is deferred rather than cancelled — if it happens, `backend` and
-`frontend` are DNS aliases on a shared network and the CRM uses the same two
-names, so one side must be prefixed again.
+both. So since 2026-09-10 it is the front door for both apps on the test box:
+
+```
+Cloudflare ──▶ ticketing proxy (:80)
+                 ├── testing.max-cpa.co.il      ──▶ this app (above)
+                 └── api-testing.max-cpa.co.il  ──▶ crm-proxy:80 ──▶ the CRM's own stack
+                                                    over max-cpa-edge
+```
+
+- **`max-cpa-edge`** is an external Docker network holding only the two
+  proxies. Neither app's `backend`/`frontend` is on it, so the two apps'
+  identical service names cannot collide. External so neither project's `down`
+  removes it; both deploy scripts create it when missing.
+- **The CRM publishes only `127.0.0.1:8082`**, for direct access over an SSH
+  tunnel. A port on the host's loopback is not reachable from inside another
+  container, which is why the network exists at all.
+- **`proxy/deploy/conf.d/crm-http.conf`** is installed only when `deploy.sh`
+  gets a fourth argument. Test passes `api-testing.max-cpa.co.il`; prod passes
+  nothing.
+- **If the CRM is down, its hostname returns 502** and this app is unaffected —
+  upstreams resolve per request, so this proxy starts without the CRM.
+- **`:80` only.** There is no certificate for the CRM's hostname, so Cloudflare
+  must stay Flexible for it; at Full it would get a 525.
+- **Deploy the CRM first, once.** Its proxy held the host's `:80` from
+  2026-09-07 to 2026-09-10. Until its own deploy moves it to loopback, this
+  app's `up` fails on the port.
+
+Everything else stays separate — app networks, Postgres, volumes, deploys. The
+full merge is still deferred rather than cancelled; if it happens, `backend`
+and `frontend` are DNS aliases on a shared network and the CRM uses the same
+two names, so one side must be prefixed again.
 
 ### The pipeline
 
@@ -157,11 +186,23 @@ read-only. Two things had to change when nginx moved into a container:
   existing certificate. The path is the stable part; what changed with the
   project rename is the container filter *inside* it, now `ticketing-proxy`.
 
-The SSL server blocks are installed only once the certificates exist. nginx
+Each SSL server block is installed only once its own certificate exists. nginx
 refuses to start when a `ssl_certificate` file is missing, but certbot's
 challenge needs a running nginx — `deploy.sh` breaks that circle by bringing
 the stack up HTTP-only on a first run, issuing, then installing the SSL blocks
 and reloading.
+
+Two things about the rendered config that are easy to break:
+
+- **`resolver` lives in `resolver.conf` alone.** nginx accepts it once at the
+  http level; a second copy in any file is a hard `[emerg] "resolver" directive
+  is duplicate`. The HTTP and SSL templates each used to carry one, which
+  would have failed the first deploy that found a certificate.
+- **`proxy-conf.d` is emptied in place, never deleted and recreated.** The
+  proxy bind-mounts it, and a running container keeps seeing the directory
+  that existed when it started — after `rm -rf` + `mkdir`, an empty one. That
+  is also why `deploy.sh` reloads nginx after `up`: `up` only recreates the
+  proxy when its compose definition changes.
 
 Port 80 still does **not** redirect to 443, so the origin works whether
 Cloudflare is set to Flexible or Full without needing to know which.
@@ -172,15 +213,18 @@ Cloudflare is set to Flexible or Full without needing to know which.
 > Nothing reports this: renewal fails quietly on certbot's timer, weeks later,
 > and the first symptom is an expired certificate. `setup-certs.sh` rewrites
 > the renewal config to `--webroot` the first time it runs for that hostname,
-> so the fix is simply to let a real deploy run. Until one has,
-> **`api-testing` on test is in this state.** Check with
-> `grep authenticator /etc/letsencrypt/renewal/*.conf`.
+> so the fix is simply to let a real deploy run. Check with
+> `grep authenticator /etc/letsencrypt/renewal/*.conf`. **`api-testing` on test
+> is still in this state**, but since 2026-09-10 nothing uses that certificate:
+> test's ticketing no longer serves the hostname, and the CRM's pass-through
+> is `:80` only.
 
-Also note that `ticketing-http.conf` puts the app and API hostnames in **one**
-server block, so on `:80` the API hostname serves the SPA too. The `:443`
-config does not — `ticketing-ssl.conf` gives the API hostname its own API-only
-block. So an app that works via the API hostname under Flexible will stop doing
-so at the Full flip. Do not treat that as a way in; it is an artifact of the
+Also note that, where a legacy API hostname still exists (prod),
+`ticketing-http.conf` puts it and the app hostname in **one** server block, so
+on `:80` the API hostname serves the SPA too. The `:443` config does not —
+`ticketing-legacy-api-ssl.conf` gives the API hostname its own API-only block.
+So an app that works via the API hostname under Flexible will stop doing so at
+the Full flip. Do not treat that as a way in; it is an artifact of the
 HTTP-only phase.
 
 ### `default_server` is claimed exactly once
@@ -370,7 +414,7 @@ POSTGRES_PASSWORD_TEST     POSTGRES_PASSWORD_PROD
 EC2_USER
 EC2_HOST_TEST              EC2_HOST_PROD
 TEST_DOMAIN                PROD_DOMAIN        the app's own hostname
-VITE_API_URL               PROD_API_URL       legacy API hostname, still served
+VITE_API_URL               PROD_API_URL       legacy API hostname (prod only; unread by test)
 VITE_CLERK_PUBLISHABLE_KEY PROD_CLERK_PUBLISHABLE_KEY
 ADMIN_EMAIL                MANAGER_EMAIL
 CERTBOT_EMAIL
@@ -411,10 +455,12 @@ had already created on the test box were dropped by hand on 2026-09-07; prod
 never had them, since its volume is not initialised until cutover.
 
 `TEST_DOMAIN` / `PROD_DOMAIN` are new: with one origin, the app's hostname is
-no longer derivable from the API URL. `VITE_API_URL` / `PROD_API_URL` are kept
-only to derive the legacy `api-*` hostname, whose server block still exists so
-that browsers holding a cached S3 bundle keep working. Retire both once the
-buckets are gone.
+no longer derivable from the API URL. `PROD_API_URL` is kept only to derive the
+legacy `api-workload` hostname, whose server block still exists so that
+browsers holding a cached S3 bundle keep working; retire it once the prod
+bucket is gone. Test retired its equivalent on 2026-09-10 — `api-testing`
+became the CRM's hostname, so the test workflow passes `none` and no longer
+reads `VITE_API_URL`. The variable can be deleted from the `test` environment.
 
 Retired after cutover: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
 `AWS_REGION`, `S3_BUCKET_TEST`, `S3_BUCKET_PROD`.

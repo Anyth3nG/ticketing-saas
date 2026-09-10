@@ -13,8 +13,10 @@
 # Postgres and its own nginx, so the name now describes what actually runs.
 #
 # Only one container can bind the host's :80 and :443, and this proxy holds
-# both. A second stack on this box publishes its entry point on another port
-# (loopback-only unless it is meant to be public).
+# both. A second stack on this box publishes its entry point on loopback, and
+# if it needs a public hostname this proxy hands that hostname across -- as it
+# does for the CRM on test since 2026-09-10, over the `edge` network below.
+# That is the only thing the two stacks share.
 #
 # IF THE TWO ARE EVER MERGED behind one proxy, note that `backend` and
 # `frontend` below are service names, and service names are DNS aliases on a
@@ -77,6 +79,11 @@ services:
       # proxy owns :80, so certbot cannot use --standalone or --nginx; it
       # writes challenge files into this directory and nginx serves them.
       - /var/www/certbot:/var/www/certbot:ro
+    networks:
+      - default
+      # Shared with the CRM's proxy and nothing else. See
+      # proxy/deploy/conf.d/crm-http.conf.
+      - edge
     depends_on:
       - backend
       - frontend
@@ -84,3 +91,11 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  # External, so neither this project's `down` nor the CRM's can remove it from
+  # under the other. That also means `up` will not create it: deploy.sh does,
+  # as does the CRM's.
+  edge:
+    name: max-cpa-edge
+    external: true

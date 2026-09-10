@@ -25,7 +25,10 @@ Internal ticketing and work distribution SaaS for a small team of ~15 users. All
 > after the box — and that is why older comments and docs mention it. Do not
 > reinstate that arrangement without asking; the merge is deferred, not
 > cancelled. Only one container can bind the host's `:80`/`:443`, and this
-> stack's proxy holds them, so a second stack publishes elsewhere.
+> stack's proxy holds them, so a second stack publishes on loopback. On test
+> this proxy also forwards the CRM's hostname (`api-testing`) to the CRM's
+> proxy over the `max-cpa-edge` network (decided 2026-09-10) — that network is
+> the only thing the two stacks share. See docs/deployment.md.
 
 ## Repository Structure
 

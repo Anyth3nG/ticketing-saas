@@ -170,13 +170,26 @@ jobs:
             bash ~/stack/bootstrap.sh '${{ vars.EC2_USER }}'
           "
 
+      # Test's hostnames, decided 2026-09-10: TEST_DOMAIN (testing) is this app,
+      # and api-testing is the CRM's, handed across to the CRM's stack by this
+      # proxy (proxy/deploy/conf.d/crm-http.conf).
+      #
+      # So test has NO legacy API hostname -- `none`. That retires the
+      # api-testing block the old S3 bundle needed, and nothing can load that
+      # bundle any more: testing's DNS stopped pointing at the bucket the same
+      # day. VITE_API_URL is no longer read here for the same reason.
+      #
+      # The CRM hostname is a literal, like the database host above: a fact
+      # about the topology, visible to a reviewer, unable to arrive empty.
+      #
+      # DEPLOY THE CRM FIRST if its proxy still binds the host's :80, as it did
+      # from 2026-09-07 to 2026-09-10. Otherwise `up` fails on the port.
       - name: Deploy
         run: |
           ssh -o StrictHostKeyChecking=no ${{ vars.EC2_USER }}@${{ vars.EC2_HOST_TEST }} "
             set -e
             echo '${{ secrets.GHCR_PULL_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
-            API_DOMAIN=\$(echo '${{ vars.VITE_API_URL }}' | sed -E 's#^https?://##; s#/.*##')
-            bash ~/stack/deploy.sh '${{ vars.TEST_DOMAIN }}' \"\$API_DOMAIN\" '${{ vars.CERTBOT_EMAIL }}'
+            bash ~/stack/deploy.sh '${{ vars.TEST_DOMAIN }}' none '${{ vars.CERTBOT_EMAIL }}' api-testing.max-cpa.co.il
           "
 
       - name: Smoke test
