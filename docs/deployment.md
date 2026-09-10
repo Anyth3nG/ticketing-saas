@@ -107,6 +107,14 @@ tested.
 Images are tagged by commit SHA rather than `:latest`, so a deploy names one
 immutable image and a rollback is redeploying an older tag.
 
+**The box keeps two versions of each image:** the one running and the newest
+other one, as the rollback target. After a successful deploy, `deploy.sh`
+removes the rest of *this app's* tags; the CRM prunes its own. Until
+2026-09-10 it pruned only untagged images, and a SHA-tagged image never is one,
+so a day of deploys filled test's 6.8 GB disk to 95%. Anything older than the
+previous version is no longer on the box, so rolling back further means
+re-running the workflow at that commit, which builds its images again.
+
 ### Preparing the box
 
 A deploy box built for the bare-metal model has no Docker on it, and its host
@@ -352,6 +360,13 @@ also reverts to the bare-metal database: anything written through the
 containerized app since cutover stays in the container volume and is not in the
 bare-metal copy.
 
+> **Test no longer has this path — it applies to prod's cutover only.** Test's
+> bare-metal leftovers (host Postgres, host nginx, `~/app`, the
+> `ticketing-backend` unit) were removed on 2026-09-10, six days after its
+> cutover. By then rolling back would have restored stale data, and host nginx
+> taking `:80` would have taken the CRM's front door down with it. A dump of
+> the old host database is in `~/backups` on the box.
+
 ---
 
 ## GitHub Actions secrets and variables
@@ -483,7 +498,8 @@ cutover above.
 ### EC2
 
 - t3.small, Ubuntu 24.04 LTS; one instance for test, one for prod
-- FastAPI under systemd, PostgreSQL on the same instance
+- FastAPI under systemd, PostgreSQL on the same instance — prod only now; test
+  ran the same until its cutover, and none of it is left there
 - Prod runs on a scheduler that stops it 20:00 and starts it 07:00
 
 ### S3
@@ -544,7 +560,7 @@ EnvironmentFile=/app/backend/.env
 WantedBy=multi-user.target
 ```
 
-A drop-in at `.service.d/override.conf` on both instances adds Postgres
+A drop-in at `.service.d/override.conf` on the prod instance adds Postgres
 ordering (`After=/Wants=postgresql.service`) and rebinds to `127.0.0.1`.
 
 **The drop-in is not in the repo and no deploy step applies it** — a rebuilt
