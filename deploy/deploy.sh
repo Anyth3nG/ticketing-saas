@@ -197,8 +197,43 @@ reload_proxy
 
 # --- 7. Tidy --------------------------------------------------------------
 #
-# Untagged images accumulate on every deploy and this disk is small. Only
-# dangling ones: a tagged image may be the rollback target.
+# THIS APP'S OLD IMAGES, KEEPING ONE ROLLBACK TARGET. Every deploy pulls a new
+# image per service, tagged by commit SHA, and a tagged image is never
+# "dangling" -- so the prune at the end never touched them. They piled up until
+# the test box's 6.8 GB disk reached 95% on 2026-09-10: five versions of each
+# app from one day's deploys, 130-200 MB apiece. So for backend and frontend
+# alike, keep the image the service runs now plus the newest other one, and
+# remove the rest.
+#
+# Only this app's repositories, found from what its own containers run -- the
+# CRM shares the box and prunes its own. `docker rmi` without -f refuses an
+# image any container still uses, so this cannot pull one from under anything.
+prune_old_app_images() {
+  local ids current repo rollback old
+  ids="$("${COMPOSE[@]}" ps -q backend frontend)"
+  [ -n "$ids" ] || return 0
+
+  for current in $(docker inspect --format '{{.Config.Image}}' $ids); do
+    repo="${current%:*}"
+    rollback="$(docker images "$repo" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' |
+      sort -r | cut -d'|' -f2 | grep -v -x -F -e "$current" -e "${repo}:<none>" | head -1 || true)"
+
+    for old in $(docker images "$repo" --format '{{.Repository}}:{{.Tag}}'); do
+      # <none> tags are dangling layers -- the prune below owns those.
+      if [ "$old" = "$current" ] || [ "$old" = "$rollback" ] || [ "$old" = "${repo}:<none>" ]; then
+        continue
+      fi
+      if docker rmi "$old" >/dev/null; then
+        echo "removed old image ${old}"
+      else
+        echo "WARNING: could not remove ${old}" >&2
+      fi
+    done
+  done
+}
+prune_old_app_images
+
+# Untagged layers, left by the removals above and by earlier pulls.
 docker image prune -f
 
 echo

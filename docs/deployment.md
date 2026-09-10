@@ -107,6 +107,14 @@ tested.
 Images are tagged by commit SHA rather than `:latest`, so a deploy names one
 immutable image and a rollback is redeploying an older tag.
 
+**The box keeps two versions of each image:** the one running and the newest
+other one, as the rollback target. After a successful deploy, `deploy.sh`
+removes the rest of *this app's* tags; the CRM prunes its own. Until
+2026-09-10 it pruned only untagged images, and a SHA-tagged image never is one,
+so a day of deploys filled test's 6.8 GB disk to 95%. Anything older than the
+previous version is no longer on the box, so rolling back further means
+re-running the workflow at that commit, which builds its images again.
+
 ### Preparing the box
 
 A deploy box built for the bare-metal model has no Docker on it, and its host
