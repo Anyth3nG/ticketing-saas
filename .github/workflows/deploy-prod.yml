@@ -189,7 +189,13 @@ jobs:
             # A read-only token: this box pulls images, it never publishes them.
             echo '${{ secrets.GHCR_PULL_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
             API_DOMAIN=\$(echo '${{ vars.PROD_API_URL }}' | sed -E 's#^https?://##; s#/.*##')
-            bash ~/stack/deploy.sh '${{ vars.PROD_DOMAIN }}' \"\$API_DOMAIN\" '${{ vars.CERTBOT_EMAIL }}'
+            # THE FOURTH ARGUMENT IS NO LONGER OPTIONAL HERE. The CRM has run
+            # on this box since 2026-10-06, and crm.max-cpa.co.il is served by
+            # a vhost in the HOST nginx -- which deploy.sh stops and disables
+            # in order to take :80/:443. Without this argument the proxy
+            # renders no crm-http.conf and the CRM goes dark the moment this
+            # deploy runs. A literal, as on test: a fact about the topology.
+            bash ~/stack/deploy.sh '${{ vars.PROD_DOMAIN }}' \"\$API_DOMAIN\" '${{ vars.CERTBOT_EMAIL }}' crm.max-cpa.co.il
           "
 
       - name: Smoke test
