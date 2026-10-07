@@ -64,6 +64,28 @@ password-reset links (single-use) instead of directly-set passwords, if this bec
 
 ---
 
+## Clerk redirects: relative URLs in the code, not the Clerk dashboard
+
+Clerk keeps a set of redirect URLs in its dashboard — where its hosted sign-in
+page sends people afterwards, where switching account lands — and falls back to
+them whenever the app does not name a URL itself. They are absolute, and there
+is one set per Clerk instance.
+
+On test that instance is shared with the CRM, and the two apps sit on different
+hostnames, so no single value can be right for both. It surfaced as a real bug:
+the avatar menu's **Add account** went to Clerk's hosted page, which returned
+people to the dashboard's after-sign-in URL — the CRM's hostname.
+
+So both apps name these URLs themselves, relatively: `signInUrl="/sign-in"` on
+`ClerkProvider` and `afterSwitchSessionUrl="/"` on `UserButton` (see
+[architecture.md](architecture.md#where-sign-in-happens)). A relative path
+follows whichever hostname the app is served from — `testing` today,
+`workload` after cutover — so a hostname change never needs a dashboard change.
+Keeping the dashboard in sync instead was rejected: it cannot match two apps at
+once.
+
+---
+
 ## Frontend: React + Vite over plain HTML/CSS/JS
 
 React was chosen despite the developer's prior experience being with plain HTML/CSS/JS because:

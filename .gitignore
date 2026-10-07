@@ -7,6 +7,14 @@ backend/venv/
 .env
 *.local
 
+# Deploy artefacts. The .env pattern above matches a file named exactly
+# ".env", so these need naming: they hold real secrets, are rendered by CI or
+# by deploy.sh on the box, and must never be committed.
+deploy/backend.env
+deploy/stack.env
+deploy/proxy-conf.d/
+deploy/proxy-templates/
+
 # Node
 node_modules/
 dist/

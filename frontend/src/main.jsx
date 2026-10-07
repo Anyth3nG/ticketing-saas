@@ -23,7 +23,10 @@ function ProtectedRoute() {
 function SignInPage() {
   return (
     <div className="sign-in-page">
-      <SignIn fallbackRedirectUrl="/" />
+      {/* Hash routing, stated rather than left to Clerk's default: the
+          multi-step flow lives in the URL fragment, so it needs no path of
+          its own and no router integration. */}
+      <SignIn routing="hash" fallbackRedirectUrl="/" />
     </div>
   )
 }
@@ -56,6 +59,11 @@ createRoot(document.getElementById('root')).render(
     <ClerkProvider
       publishableKey={import.meta.env.VITE_CLERK_PUBLISHABLE_KEY}
       afterSignOutUrl="/"
+      // Where "Add account" goes. Relative, so it stays on whichever hostname
+      // this is. Unset, Clerk sends it to its own hosted sign-in page instead,
+      // which returns you to the one after-sign-in URL saved for the whole
+      // Clerk instance -- shared with the CRM on test, and pointing at it.
+      signInUrl="/sign-in"
       appearance={{
         layout: {
           logoImageUrl: '/logo_mark.svg',

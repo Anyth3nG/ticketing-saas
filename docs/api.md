@@ -7,8 +7,12 @@
 | Environment | URL |
 |---|---|
 | Dev | `http://localhost/api` |
-| Test | `https://api-testing.max-cpa.co.il/api` |
+| Test | `https://testing.max-cpa.co.il/api` |
 | Prod | `https://api-workload.max-cpa.co.il/api` |
+
+Test is containerized and serves the API on the app's own hostname. Its old
+`api-testing` hostname belongs to the CRM since 2026-09-10. Prod keeps
+`api-workload` until its cutover — see [deployment.md](deployment.md).
 
 ## Authentication
 

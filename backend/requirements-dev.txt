@@ -1,0 +1,9 @@
+# Test-only dependencies. The image built for deployment installs
+# requirements.txt alone, so pytest never ships to the server; local
+# compose passes INSTALL_DEV=true to get this file instead.
+-r requirements.txt
+
+iniconfig==2.3.0
+pluggy==1.6.0
+Pygments==2.20.0
+pytest==9.1.1

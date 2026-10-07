@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# SUPERSEDED BY deploy/setup-certs.sh -- BUT STILL THE LIVE PRODUCTION PATH.
+#
+# This whole directory belongs to the bare-metal deployment: a host nginx in
+# front of a systemd-managed FastAPI on :8000. The containerized stack replaces
+# it -- the proxy is a container that owns its own config, and the host is left
+# holding certificates only.
+#
+# It is kept, not deleted, because the cutover has not happened yet. Until it
+# does, this is what is actually running in front of the firm's users. Delete
+# this directory in the same change that switches the deploy over, not before.
+#
 # Idempotent: safe to run on every deploy. Installs nginx + certbot if
 # missing, reverse-proxies :80/:443 -> the FastAPI app on :8000, and
 # issues/renews a Let's Encrypt cert for the given domain.

@@ -1,0 +1,79 @@
+# Local development stack.
+#
+# It mirrors the production topology deliberately: the same nginx reverse
+# proxy sits in front, so same-origin /api routing and SPA fallback are
+# exercised locally exactly as they will be on the EC2 box.
+#
+# What differs in production is only that the app images are pulled from GHCR
+# rather than built here. See deploy/docker-compose.prod.yml.
+#
+# These services used to carry a `ticketing-` prefix, for a production layout
+# where they would have shared one Docker network with the CRM's containers and
+# a bare `backend` would have collided. The CRM became its own compose project
+# on 2026-09-07, with its own network and its own Postgres, so nothing shares a
+# namespace and the prefix only stuttered against the project name.
+
+name: ticketing-saas
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ticketing_dev
+      POSTGRES_PASSWORD: ticketing_dev
+      POSTGRES_DB: ticketing_saas
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketing_dev -d ticketing_saas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        # Local builds include pytest so `docker compose exec backend pytest`
+        # works. The deploy build omits it.
+        INSTALL_DEV: "true"
+    env_file:
+      - backend/.env
+    environment:
+      # Overrides whatever backend/.env says, so the container reaches the
+      # service rather than a localhost that holds nothing. Everything else
+      # comes from the env file.
+      DATABASE_URL: postgresql://ticketing_dev:ticketing_dev@postgres:5432/ticketing_saas
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the bundle at BUILD time, not read at container start.
+        VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY:-}
+        # Empty hides the link to the CRM.
+        VITE_CRM_URL: ${VITE_CRM_URL:-}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:1.27-alpine
+    ports:
+      # 8081, not 8080: the CRM's local stack already uses 8080, and both are
+      # checked out on the same machine.
+      - "8081:80"
+    volumes:
+      - ./proxy/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
