@@ -21,9 +21,12 @@ DOMAIN="${1:?$USAGE}"
 # has to stay an error instead of quietly meaning "none".
 API_DOMAIN="${2:?missing legacy api domain -- pass 'none' if this environment has none}"
 CERTBOT_EMAIL="${3:?missing certbot email}"
-# Optional: a hostname this proxy hands across to the CRM, which runs as its own
-# compose project on the same box. See proxy-templates/crm-http.conf. Test
-# passes one; prod passes none, because the CRM does not run there yet.
+# A hostname this proxy hands across to the CRM, which runs as its own compose
+# project on the same box. See proxy-templates/crm-http.conf. BOTH environments
+# pass one now: test api-testing.max-cpa.co.il, prod crm.max-cpa.co.il since
+# the CRM was deployed there on 2026-10-06. Omitting it on a box where the CRM
+# runs takes the CRM offline, because this script disables the host nginx that
+# was serving it.
 CRM_DOMAIN="${4:-}"
 
 # One hostname in two server blocks is not something nginx refuses. It warns

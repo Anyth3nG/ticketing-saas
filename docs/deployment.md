@@ -505,7 +505,8 @@ cutover above.
 ### S3
 
 - One bucket per environment, named to **exactly match its custom domain**
-  (`testing.max-cpa.co.il`, `workload.max-cpa.co.il`). S3 website hosting
+  (`workload.max-cpa.co.il`; test's `testing.max-cpa.co.il` was deleted on
+  2026-09-10, after test moved to containers). S3 website hosting
   matches the bucket name against the `Host` header, so a CNAME pointing at a
   differently-named bucket 404s with `NoSuchBucket`.
 - Static website hosting, `index.html` as both index and error document
