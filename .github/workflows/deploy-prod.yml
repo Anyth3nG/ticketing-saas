@@ -29,6 +29,18 @@ jobs:
     # publishable key, which Vite inlines at build time. Miss it here and
     # the build stays green while shipping a bundle nobody can log into.
     environment: prod
+    # The CRM's prod address, for the navbar link that opens it signed in (see
+    # frontend/.env.example). A literal, like the CRM hostname in the deploy
+    # job below. The assert step reads it from here too.
+    #
+    # Both apps run on the SAME Clerk production instance
+    # (clerk.max-cpa.co.il), and both hostnames are subdomains of
+    # max-cpa.co.il, so the session cookie is set on the parent domain and the
+    # user stays signed in across the hop. Nothing is passed in the URL:
+    # Clerk's buildUrlWithAuth only appends a token on a DEVELOPMENT instance,
+    # which is what test needs and prod does not.
+    env:
+      VITE_CRM_URL: https://crm.max-cpa.co.il
     permissions:
       contents: read
       packages: write
@@ -82,6 +94,7 @@ jobs:
           tags: ${{ steps.meta.outputs.frontend_image }}
           build-args: |
             VITE_CLERK_PUBLISHABLE_KEY=${{ vars.PROD_CLERK_PUBLISHABLE_KEY }}
+            VITE_CRM_URL=${{ env.VITE_CRM_URL }}
 
   deploy:
     name: Deploy to prod
