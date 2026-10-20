@@ -85,8 +85,22 @@ COMPOSE=(docker compose)
 # same path while a running proxy goes on seeing the deleted one -- empty
 # (verified 2026-09-10). A config change would then reach the proxy only at its
 # next restart, which on these boxes means the nightly stop/start.
+# `sudo test`, NOT a plain `[ -f ]`. This script runs as `ubuntu`, and certbot
+# leaves /etc/letsencrypt/live as drwx------ root. An unprivileged -f test on a
+# path inside it cannot tell "no certificate" from "may not look": it returns
+# false either way, and says nothing.
+#
+# It did exactly that from the cutover until 2026-10-20. workload.max-cpa.co.il
+# held a valid certificate from 2026-10-07 while this guard reported none, so
+# no *-ssl.conf was ever rendered and the box terminated TLS for no hostname at
+# all -- the point of issuing the certificate, undone by the test meant to
+# protect it. Assert the end state instead: after a deploy, a handshake per
+# hostname should succeed.
+#
+# nginx was never the problem. The proxy mounts /etc/letsencrypt read-only and
+# runs as root inside the container, so it reads the certificates fine.
 have_cert() {
-  [ -f "/etc/letsencrypt/live/$1/fullchain.pem" ]
+  sudo test -f "/etc/letsencrypt/live/$1/fullchain.pem"
 }
 
 render() {
@@ -112,6 +126,9 @@ render_proxy_conf() {
   fi
   if [ -n "$CRM_DOMAIN" ]; then
     render crm-http.conf
+  fi
+  if [ -n "$CRM_DOMAIN" ] && have_cert "$CRM_DOMAIN"; then
+    render crm-ssl.conf
   fi
 
   echo "proxy config: $(ls proxy-conf.d | tr '\n' ' ')"
@@ -190,7 +207,7 @@ reload_proxy
 # --- 6. Certificates ------------------------------------------------------
 #
 # After the proxy is up, because the http-01 challenge is served BY the proxy.
-sudo bash "${STACK_DIR}/setup-certs.sh" "$DOMAIN" "$API_DOMAIN" "$CERTBOT_EMAIL"
+sudo bash "${STACK_DIR}/setup-certs.sh" "$DOMAIN" "$API_DOMAIN" "$CERTBOT_EMAIL" "$CRM_DOMAIN"
 
 # A first issuance makes an SSL block installable now. Re-rendered either way:
 # it is cheap, and it keeps the running config identical to what a fresh

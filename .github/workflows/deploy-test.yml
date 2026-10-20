@@ -85,8 +85,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: test
-    # DELETE THIS LINE AT CUTOVER.
-    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
