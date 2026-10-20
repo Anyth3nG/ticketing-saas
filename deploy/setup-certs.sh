@@ -23,16 +23,32 @@
 #    while the proxy goes on serving the expired one until it fails.
 set -euo pipefail
 
-DOMAIN="${1:?usage: setup-certs.sh <domain> <legacy-api-domain|none> <email>}"
+DOMAIN="${1:?usage: setup-certs.sh <domain> <legacy-api-domain|none> <email> [crm-domain]}"
 API_DOMAIN="${2:?missing legacy api domain -- or 'none'}"
+# The Let's Encrypt account on these boxes was registered with NO email
+# contact, so this value reaches certbot and changes nothing: the account
+# already exists and -m is not reapplied to it. It is kept as a required
+# argument because a future box would register from scratch. The cost of the
+# empty contact is that expiry warnings are never emailed, which is why
+# renewal has to be checked rather than waited on.
 EMAIL="${3:?missing email}"
+# Optional, and passed by deploy.sh from its own 4th argument.
+CRM_DOMAIN="${4:-}"
 
-# The app's hostname always; the legacy API hostname only where it still
-# exists. The CRM's hostname is never here -- this proxy serves it on :80 only
-# (see proxy/deploy/conf.d/crm-http.conf).
+# The app's hostname always; the legacy API hostname and the CRM's hostname
+# only where they exist.
+#
+# THE CRM'S HOSTNAME BELONGS HERE as of 2026-10-20. It used to be excluded --
+# this proxy served it on :80 only -- which is what kept Cloudflare pinned to
+# Flexible mode and the Cloudflare-to-origin hop in cleartext for live client
+# data. It now gets a certificate and a :443 block like any other hostname
+# (proxy/deploy/conf.d/crm-ssl.conf).
 domains=("$DOMAIN")
 if [ "$API_DOMAIN" != none ]; then
   domains+=("$API_DOMAIN")
+fi
+if [ -n "$CRM_DOMAIN" ]; then
+  domains+=("$CRM_DOMAIN")
 fi
 
 WEBROOT=/var/www/certbot
