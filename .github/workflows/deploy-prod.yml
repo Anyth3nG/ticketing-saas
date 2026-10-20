@@ -101,8 +101,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: prod
-    # DELETE THIS LINE AT CUTOVER to let a push to main deploy.
-    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
