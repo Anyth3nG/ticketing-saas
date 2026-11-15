@@ -32,7 +32,7 @@ export default function Navbar() {
   const [layoutWorkers, setLayoutWorkers] = useState([]);
   const [showLayoutEditor, setShowLayoutEditor] = useState(false);
   const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
-  const isDashboard = DASHBOARD_PATHS.includes(pathname);
+  const isDashboard = DASHBOARD_PATHS.includes(pathname) || pathname.startsWith("/bot");
   const isArchive = pathname === "/archive";
   const isMyWork = pathname === "/manager/work";
   const isYuliaWork = pathname === "/admin/yulia-work";
@@ -105,12 +105,16 @@ export default function Navbar() {
           My Work
         </Link>
       )}
-      <Link
-        className={"navbar-link" + (isArchive ? " navbar-link-active" : "")}
-        to="/archive"
-      >
-        Archive
-      </Link>
+      {/* A bot's only page is its ticket table; the archive is a board it can't
+          use (it is built around changing tickets). */}
+      {role !== "bot" && (
+        <Link
+          className={"navbar-link" + (isArchive ? " navbar-link-active" : "")}
+          to="/archive"
+        >
+          Archive
+        </Link>
+      )}
       {isAdmin && (
         <Link
           className={"navbar-link" + (isYuliaWork ? " navbar-link-active" : "")}
@@ -119,7 +123,9 @@ export default function Navbar() {
           Yulia&rsquo;s Work
         </Link>
       )}
-      {CRM_URL && (
+      {/* Hidden for a bot account, and until the role has loaded. Cosmetic only:
+          the CRM decides for itself who it lets in. */}
+      {CRM_URL && role && role !== "bot" && (
         <a className="navbar-link" href={CRM_URL} onClick={openCrm}>
           CRM
         </a>
@@ -136,7 +142,8 @@ export default function Navbar() {
           <GridIcon />
         </button>
       )}
-      <NotificationBell role={role} />
+      {/* A bot is never assigned work or mentioned, so it has no notifications. */}
+      {role !== "bot" && <NotificationBell role={role} />}
       {/* Switching account lands on "/" on THIS hostname, where RoleRedirect
           picks the new user's dashboard. Unset, Clerk uses the absolute URL
           saved in its dashboard, which on test points at the CRM. */}

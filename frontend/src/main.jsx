@@ -9,7 +9,10 @@ import ManagerDashboard from './pages/ManagerDashboard.jsx'
 import ManagerWorkDashboard from './pages/ManagerWorkDashboard.jsx'
 import Archive from './pages/Archive.jsx'
 import AdminYuliaWork from './pages/AdminYuliaWork.jsx'
+import BotAccount from './pages/BotAccount.jsx'
+import BotTicket from './pages/BotTicket.jsx'
 import { getCurrentUser } from './api/users.js'
+import { homePathFor } from './utils/roles.js'
 
 function ProtectedRoute() {
   const { isLoaded, isSignedIn } = useAuth()
@@ -41,7 +44,7 @@ function RoleRedirect() {
     async function load() {
       const token = await getToken()
       const user = await getCurrentUser(token)
-      if (!cancelled) setTarget(user.role === 'manager' ? '/manager' : '/worker')
+      if (!cancelled) setTarget(homePathFor(user.role))
     }
 
     load()
@@ -79,6 +82,8 @@ createRoot(document.getElementById('root')).render(
               <Route path="/" element={<RoleRedirect />} />
               <Route path="/worker" element={<WorkerDashboard />} />
               <Route path="/manager" element={<ManagerDashboard />} />
+              <Route path="/bot" element={<BotAccount />} />
+              <Route path="/bot/tickets/:id" element={<BotTicket />} />
               <Route path="/manager/work" element={<ManagerWorkDashboard />} />
               <Route path="/archive" element={<Archive />} />
               <Route path="/admin/yulia-work" element={<AdminYuliaWork />} />

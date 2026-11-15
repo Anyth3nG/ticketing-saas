@@ -3,6 +3,7 @@ import { useAuth } from "@clerk/react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createTicket, getTickets, updateTicketStatus } from "../api/tickets";
 import { getCurrentUser, getUsers } from "../api/users";
+import { homePathFor } from "../utils/roles";
 import TicketDetailModal from "../components/TicketDetailModal";
 import StatusDot, { STATUS_COLORS, STATUS_LABELS } from "../components/StatusDot";
 import { AlertIcon, CheckIcon } from "../components/icons";
@@ -207,7 +208,7 @@ export default function ManagerDashboard() {
         ]);
         if (isCancelled()) return;
         if (currentUser.role !== "manager") {
-          navigate("/worker", { replace: true });
+          navigate(homePathFor(currentUser.role), { replace: true });
           return;
         }
         setUser(currentUser);

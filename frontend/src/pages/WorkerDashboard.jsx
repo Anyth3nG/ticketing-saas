@@ -16,6 +16,7 @@ import {
   updateTicketStatus,
 } from "../api/tickets";
 import { getCurrentUser } from "../api/users";
+import { homePathFor } from "../utils/roles";
 import TicketCard from "../components/TicketCard";
 import TicketDetailModal from "../components/TicketDetailModal";
 import RecurringTemplateCard from "../components/RecurringTemplateCard";
@@ -248,7 +249,7 @@ export default function WorkerDashboard() {
         ]);
         if (isCancelled()) return;
         if (currentUser.role !== "worker") {
-          navigate("/manager", { replace: true });
+          navigate(homePathFor(currentUser.role), { replace: true });
           return;
         }
         setUser(currentUser);
