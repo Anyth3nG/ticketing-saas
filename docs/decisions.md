@@ -64,6 +64,44 @@ password-reset links (single-use) instead of directly-set passwords, if this bec
 
 ---
 
+## A `bot` role: read everything, write nothing
+
+An integration (the Orion bot) needs to read ticket statuses. It is a normal Clerk user whose
+`users.role` is `bot` -- a plain string, so no migration. `backend/roles.py` names the roles.
+
+- **Read-only is enforced once, for every route**: `auth.reject_bot_writes` is attached to every
+  router in `main.py` and refuses any method other than GET/HEAD/OPTIONS. It is a separate
+  dependency rather than a check inside `get_current_user` because tests replace that function to
+  log in, which would skip a check living inside it. A test fails if a router is included without
+  it, so a write route added later is covered automatically.
+- **Visibility**: a bot sees every ticket and comment, like a manager (`_can_view_ticket`,
+  `list_tickets`). It gets no `/users` list and no admin view. Its `GET /tickets/` skips recurring
+  generation, because that call writes.
+- **It can't be assigned work**: `assign_ticket` returns 400 for a bot.
+- **It reads the web app, not the API.** Grok Bot is a browser agent: it signs in through the
+  normal Clerk page and reads the screen. So a bot lands on `/bot`, a plain read-only table of
+  every ticket (filters live in the URL, each ticket links to `/bot/tickets/:id` with its full
+  comment thread), and the navbar hides what a bot can't use. `TicketResponse` carries the
+  creator's name because a personal ticket has no assignee and a bot has no user list.
+- **A name ending in `_bot` is a bot**, in every environment: `roles.role_for_new_account` picks
+  the role when a row is first created. Applied at creation only, never on the hourly Clerk
+  refresh -- names are user-editable in Clerk, so doing it on refresh would let anyone rename
+  themselves into a role. It only ever makes an account read-only, and sign-up is disabled so
+  every new name is one the manager chose. A row that already exists is not changed: fix it with
+  `UPDATE users SET role = 'bot' WHERE id = ...`, or delete it before the account logs in again.
+
+**The CRM is not protected by any of this.** The bot signs in with a Clerk password, and where the
+CRM shares the Clerk instance (prod does, as far as is known) that password is also a CRM login.
+Ticketing's proxy cannot block it: nginx can't read who a session belongs to, and a gate on this
+path would be bypassed by anything reaching the CRM another way. The check belongs in the CRM
+repo, rejecting the bot's `clerk_id` where it resolves users.
+
+Clerk's password sign-in is meant for browsers; driving it from a server works but is not a
+supported flow and could break on a Clerk update. Clerk's Backend API sign-in tokens are the
+supported alternative.
+
+---
+
 ## Clerk redirects: relative URLs in the code, not the Clerk dashboard
 
 Clerk keeps a set of redirect URLs in its dashboard — where its hosted sign-in
