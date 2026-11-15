@@ -30,7 +30,7 @@ COPY models ./models
 COPY routes ./routes
 COPY services ./services
 COPY tests ./tests
-COPY auth.py custom_board.py database.py main.py schemas.py ./
+COPY auth.py custom_board.py database.py main.py roles.py schemas.py ./
 
 EXPOSE 8000
 

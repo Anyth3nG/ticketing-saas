@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 
 import httpx
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
+from roles import BOT, MANAGER, SAFE_METHODS, role_for_new_account
 
 security = HTTPBearer()
 
@@ -196,7 +197,7 @@ def get_current_user(
         email=email,
         name=name,
         avatar_url=avatar_url,
-        role="worker",
+        role=role_for_new_account(name),
         synced_at=datetime.utcnow(),
     )
     db.add(user)
@@ -251,6 +252,33 @@ def get_current_user(
 
 
 def require_manager(user: User = Depends(get_current_user)) -> User:
-    if user.role != "manager":
+    if user.role != MANAGER:
         raise HTTPException(status_code=403, detail="Managers only")
+    return user
+
+
+def reject_bot_writes(
+    request: Request, user: User = Depends(get_current_user)
+) -> User:
+    """Refuse anything but a read from a bot account, for every route at once.
+
+    Attached to each router in main.py rather than written into individual
+    routes, so the rule is "a bot cannot write" and not "a bot cannot write to
+    the routes someone remembered to protect": a write endpoint added next year
+    is covered the moment its router is included. A test fails if a router is
+    ever included without this (tests/test_bot_role.py).
+
+    It is a separate dependency rather than a check inside get_current_user
+    because the tests replace get_current_user wholesale to log in as someone,
+    which would skip a check living inside it -- and this rule has to be
+    testable. FastAPI resolves a dependency used by several routes once per
+    request, so this costs no extra user lookup.
+
+    The method is the test, not the route: GET/HEAD/OPTIONS are safe by HTTP's
+    own contract. That puts the burden on this codebase never to make a GET
+    change state -- which it already broke once (GET /tickets/ materialises
+    recurring tickets), hence the bot skip in routes/tickets.py::list_tickets.
+    """
+    if user.role == BOT and request.method not in SAFE_METHODS:
+        raise HTTPException(status_code=403, detail="Read-only account")
     return user

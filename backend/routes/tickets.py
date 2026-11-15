@@ -18,6 +18,7 @@ from models import (
     TicketComment,
     User,
 )
+from roles import BOT, MANAGER
 from schemas import (
     AssignmentCreate,
     PersonalTicketCreate,
@@ -40,7 +41,10 @@ def _is_assigned(ticket: Ticket, user_id: int) -> bool:
 
 
 def _can_view_ticket(ticket: Ticket, user: User) -> bool:
-    if user.role == "manager":
+    # A bot sees what a manager sees -- every ticket and its comments, personal
+    # boards included. Viewing is all it gets: see _can_update_status, and
+    # auth.reject_bot_writes for the rule that stops it writing.
+    if user.role in (MANAGER, BOT):
         return True
     if _is_assigned(ticket, user.id):
         return True
@@ -56,6 +60,13 @@ def _can_edit_ticket_fields(ticket: Ticket, user: User) -> bool:
 
 
 def _can_update_status(ticket: Ticket, user: User, new_status: str) -> bool:
+    # A backstop, not the rule. Seeing every ticket would otherwise carry a bot
+    # through the worker checks below (_can_view_ticket is true for it), so if
+    # auth.reject_bot_writes were ever bypassed this would be the one place a
+    # bot could still move a ticket.
+    if user.role == BOT:
+        return False
+
     if ticket.ticket_type == "personal" and ticket.created_by == user.id:
         if uses_custom_board(user):
             # This board's own statuses, plus done so work can still be
@@ -263,10 +274,13 @@ def list_tickets(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    generate_due_recurring_tickets(db, current_user)
+    # Not for a bot: this call writes (it materialises the month's recurring
+    # tickets), and a bot's GET must stay a GET.
+    if current_user.role != BOT:
+        generate_due_recurring_tickets(db, current_user)
 
     query = db.query(Ticket)
-    if current_user.role != "manager":
+    if current_user.role not in (MANAGER, BOT):
         query = query.filter(
             or_(
                 Ticket.assigned_to == current_user.id,
@@ -455,6 +469,10 @@ def assign_ticket(
     assignee = db.query(User).filter(User.id == payload.user_id).first()
     if assignee is None:
         raise HTTPException(status_code=400, detail="user_id not found")
+    if assignee.role == BOT:
+        # A bot can't act on work, so a ticket assigned to one would sit there
+        # with nobody able to move it.
+        raise HTTPException(status_code=400, detail="Work can't be assigned to a bot")
 
     ticket.assigned_to = assignee.id
     db.commit()

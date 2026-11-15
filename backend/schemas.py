@@ -97,6 +97,10 @@ class TicketResponse(BaseModel):
     updated_at: datetime
     completed_at: Optional[datetime] = None
     assignee: Optional[UserResponse] = None
+    # Who made it. `created_by` alone is an id, which is no use to a reader that
+    # has no user list -- and for a personal ticket (no assignee) it is the only
+    # statement of whose ticket it is.
+    creator: Optional[UserResponse] = None
     comment_count: int = 0
 
     @staticmethod
@@ -104,6 +108,9 @@ class TicketResponse(BaseModel):
         response = TicketResponse.model_validate(ticket)
         response.assignee = (
             UserResponse.model_validate(ticket.assignee) if ticket.assignee else None
+        )
+        response.creator = (
+            UserResponse.model_validate(ticket.creator) if ticket.creator else None
         )
         response.comment_count = len(ticket.comments)
         return response

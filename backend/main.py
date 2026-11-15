@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 # The interactive docs publish every route, parameter and schema. That's
 # useful locally, but on a public origin it just hands an attacker the full
@@ -35,14 +35,25 @@ def health():
     return {"status": "ok"}
 
 
+from auth import reject_bot_writes
 from routes.tickets import router as tickets_router
 from routes.users import router as users_router
 from routes.notifications import router as notifications_router
 from routes.admin import router as admin_router
 from routes.meetings import router as meetings_router
 
-app.include_router(tickets_router, prefix="/api")
-app.include_router(users_router, prefix="/api")
-app.include_router(notifications_router, prefix="/api")
-app.include_router(admin_router, prefix="/api")
-app.include_router(meetings_router, prefix="/api")
+# Every router goes in this one list, and every one gets the bot guard: a bot
+# account is read-only, and that has to hold for routes that don't exist yet.
+# A router included any other way would escape it --
+# tests/test_bot_role.py::test_every_api_route_sits_behind_the_bot_guard fails
+# if one does.
+for _router in (
+    tickets_router,
+    users_router,
+    notifications_router,
+    admin_router,
+    meetings_router,
+):
+    app.include_router(
+        _router, prefix="/api", dependencies=[Depends(reject_bot_writes)]
+    )
