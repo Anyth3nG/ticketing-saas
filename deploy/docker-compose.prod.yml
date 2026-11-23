@@ -65,7 +65,11 @@ services:
     restart: unless-stopped
 
   proxy:
-    image: nginx:1.27-alpine
+    # See the note in the repo's docker-compose.yml. 1.30.7 fixes the HTTP/2
+    # RCEs (CVE-2026-123633, CVE-2026-123007). This is the instance that owns
+    # :80/:443 for both apps, so it is the one that would be exposed if HTTP/2
+    # were ever enabled -- keep it on a supported branch.
+    image: nginx:1.30.7-alpine
     ports:
       - "80:80"
       - "443:443"
