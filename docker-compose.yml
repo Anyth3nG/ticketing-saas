@@ -63,7 +63,15 @@ services:
     restart: unless-stopped
 
   proxy:
-    image: nginx:1.27-alpine
+    # 1.30.x is the current stable branch. 1.27 went EOL still carrying the
+    # HTTP/2 RCEs fixed in 1.30.7 (CVE-2026-123633, CVE-2026-123007), which
+    # need HTTP/2 negotiated to reach. The conf.d blocks use plain
+    # `listen 443 ssl` with no `http2 on`, so they never negotiate it -- but an
+    # EOL branch also stops receiving the next such fix. Keep this and the
+    # deploy/ copy on the same tag: there, this proxy owns the box's :80/:443
+    # for both apps, so that is where enabling HTTP/2 on an old nginx would
+    # actually be reachable.
+    image: nginx:1.30.7-alpine
     ports:
       # 8081, not 8080: the CRM's local stack already uses 8080, and both are
       # checked out on the same machine.
